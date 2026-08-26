@@ -93,7 +93,7 @@ cp .env.example .env
 
 # 3. 启动（端口默认 5000；macOS 若被 AirPlay 占用可设 PORT，如 5050）
 .venv/bin/python -m app
-PORT=5050 .venv/bin/python -m app
+PORT=8081 .venv/bin/python -m app
 # 或
 flask --app app run
 ```
