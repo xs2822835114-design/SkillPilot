@@ -1,0 +1,515 @@
+{
+  "project": "SkillPilot",
+  "kb": "role-competency",
+  "description": "岗位能力模型（第二批知识库之一）：定义各岗位的 required_skills（level 0-5 + weight），用于技术栈缺口分析。与核心技术知识源分库存放。",
+  "version": "1.0",
+  "created_at": "2026-08-27",
+  "level_scale": {
+    "0": "未知/无要求",
+    "1": "了解（能概述概念与定位）",
+    "2": "会用（能按示例完成简单场景）",
+    "3": "熟练（能独立完成常见需求）",
+    "4": "精通（能解决复杂问题并优化）",
+    "5": "专家（能设计/授课/沉淀方法论）"
+  },
+  "roles": [
+    {
+      "role_id": "RC001",
+      "role": "AI 应用工程师",
+      "role_en": "AI Application Engineer",
+      "category": "AI/Application",
+      "seniority": "中级",
+      "summary": "基于大模型 API 构建业务应用，完成调用、提示词、评测与线上落地。",
+      "required_skills": [
+        { "skill": "LLM API", "level": 4, "weight": 1.0, "reason": "核心工作对象" },
+        { "skill": "Prompt Engineering", "level": 4, "weight": 1.0, "reason": "提示词工程" },
+        { "skill": "Python", "level": 3, "weight": 0.9, "reason": "主开发语言" },
+        { "skill": "RAG", "level": 3, "weight": 0.8, "reason": "知识库问答" },
+        { "skill": "FastAPI", "level": 3, "weight": 0.8, "reason": "服务封装" },
+        { "skill": "Vector DB", "level": 2, "weight": 0.6, "reason": "向量检索" },
+        { "skill": "API Design", "level": 3, "weight": 0.6, "reason": "接口设计" },
+        { "skill": "Docker", "level": 2, "weight": 0.5, "reason": "部署" }
+      ]
+    },
+    {
+      "role_id": "RC002",
+      "role": "AI Agent 工程师",
+      "role_en": "AI Agent Engineer",
+      "category": "AI/Application",
+      "seniority": "中级",
+      "summary": "设计并编排有状态、可编排、能调用工具的智能体，控制执行流程。",
+      "required_skills": [
+        { "skill": "LangGraph", "level": 4, "weight": 1.0, "reason": "Agent 编排核心" },
+        { "skill": "LLM API", "level": 4, "weight": 1.0, "reason": "模型调用与工具绑定" },
+        { "skill": "Python", "level": 4, "weight": 0.9, "reason": "主开发语言" },
+        { "skill": "Prompt Engineering", "level": 4, "weight": 0.9, "reason": "工具/角色提示词" },
+        { "skill": "RAG", "level": 3, "weight": 0.8, "reason": "记忆与知识接入" },
+        { "skill": "Tool Calling", "level": 4, "weight": 1.0, "reason": "函数调用" },
+        { "skill": "State Management", "level": 3, "weight": 0.7, "reason": "状态与检查点" },
+        { "skill": "Vector DB", "level": 2, "weight": 0.6, "reason": "长期记忆" }
+      ]
+    },
+    {
+      "role_id": "RC003",
+      "role": "大模型应用工程师（RAG/知识库）",
+      "role_en": "LLM Application Engineer",
+      "category": "AI/Application",
+      "seniority": "中级",
+      "summary": "面向文档/知识库构建检索增强问答与内容生成链路。",
+      "required_skills": [
+        { "skill": "RAG", "level": 4, "weight": 1.0, "reason": "核心" },
+        { "skill": "Vector DB", "level": 4, "weight": 1.0, "reason": "向量存储/检索" },
+        { "skill": "Embedding", "level": 3, "weight": 0.8, "reason": "向量化" },
+        { "skill": "Python", "level": 3, "weight": 0.8, "reason": "主语言" },
+        { "skill": "Chunking/切分", "level": 3, "weight": 0.7, "reason": "文档预处" },
+        { "skill": "LLM API", "level": 3, "weight": 0.8, "reason": "生成编排" },
+        { "skill": "SQL", "level": 2, "weight": 0.4, "reason": "元数据/日志" },
+        { "skill": "Evaluation", "level": 3, "weight": 0.6, "reason": "检索/问答评测" }
+      ]
+    },
+    {
+      "role_id": "RC004",
+      "role": "大模型算法工程师",
+      "role_en": "LLM Algorithm Engineer",
+      "category": "AI/Algorithm",
+      "seniority": "高级",
+      "summary": "面向基座/垂直大模型的训练与优化：SFT、RLHF、评测、蒸馏等。",
+      "required_skills": [
+        { "skill": "Python", "level": 5, "weight": 1.0, "reason": "主语言" },
+        { "skill": "Deep Learning", "level": 4, "weight": 1.0, "reason": "模型原理" },
+        { "skill": "PyTorch", "level": 4, "weight": 1.0, "reason": "训练框架" },
+        { "skill": "Transformer", "level": 5, "weight": 1.0, "reason": "架构理解" },
+        { "skill": "Prompt Engineering", "level": 3, "weight": 0.6, "reason": "数据构造" },
+        { "skill": "NLP", "level": 4, "weight": 0.8, "reason": "语言任务" },
+        { "skill": "分布式训练", "level": 3, "weight": 0.7, "reason": "大规模训练" },
+        { "skill": "Fine-tuning", "level": 4, "weight": 1.0, "reason": "微调链路" }
+      ]
+    },
+    {
+      "role_id": "RC005",
+      "role": "机器学习工程师",
+      "role_en": "Machine Learning Engineer",
+      "category": "AI/Algorithm",
+      "seniority": "中级",
+      "summary": "开发并上线传统/深度模型，完成特征工程、训练、评估与服务化。",
+      "required_skills": [
+        { "skill": "Python", "level": 4, "weight": 1.0, "reason": "主语言" },
+        { "skill": "Machine Learning", "level": 4, "weight": 1.0, "reason": "核心" },
+        { "skill": "Algorithms & Data Structures", "level": 3, "weight": 0.8, "reason": "工程基础" },
+        { "skill": "SQL", "level": 3, "weight": 0.7, "reason": "特征取数" },
+        { "skill": "Statistics", "level": 3, "weight": 0.7, "reason": "评估与假设" },
+        { "skill": "PyTorch", "level": 3, "weight": 0.7, "reason": "建模" },
+        { "skill": "Docker", "level": 3, "weight": 0.6, "reason": "服务化" }
+      ]
+    },
+    {
+      "role_id": "RC006",
+      "role": "计算机视觉工程师",
+      "role_en": "Computer Vision Engineer",
+      "category": "AI/Algorithm",
+      "seniority": "中级",
+      "summary": "目标检测/识别/分割等视觉任务的数据、训练与部署。",
+      "required_skills": [
+        { "skill": "Python", "level": 4, "weight": 1.0, "reason": "主语言" },
+        { "skill": "Deep Learning", "level": 4, "weight": 1.0, "reason": "模型设计" },
+        { "skill": "PyTorch", "level": 4, "weight": 1.0, "reason": "训练框架" },
+        { "skill": "Computer Vision", "level": 4, "weight": 1.0, "reason": "核心领域" },
+        { "skill": "OpenCV", "level": 3, "weight": 0.7, "reason": "图像处理" },
+        { "skill": "Docker", "level": 2, "weight": 0.5, "reason": "部署" },
+        { "skill": "MLOps", "level": 2, "weight": 0.5, "reason": "上线" }
+      ]
+    },
+    {
+      "role_id": "RC007",
+      "role": "自然语言处理工程师",
+      "role_en": "NLP Engineer",
+      "category": "AI/Algorithm",
+      "seniority": "中级",
+      "summary": "文本分类、抽取、生成、语义理解等 NLP 任务。",
+      "required_skills": [
+        { "skill": "Python", "level": 4, "weight": 1.0, "reason": "主语言" },
+        { "skill": "NLP", "level": 4, "weight": 1.0, "reason": "核心领域" },
+        { "skill": "PyTorch", "level": 3, "weight": 0.9, "reason": "建模" },
+        { "skill": "Deep Learning", "level": 3, "weight": 0.9, "reason": "基础" },
+        { "skill": "Transformer", "level": 3, "weight": 0.8, "reason": "预训练模型" },
+        { "skill": "Fine-tuning", "level": 3, "weight": 0.7, "reason": "任务微调" }
+      ]
+    },
+    {
+      "role_id": "RC008",
+      "role": "数据分析师",
+      "role_en": "Data Analyst",
+      "category": "Data",
+      "seniority": "初级",
+      "summary": "取数、清洗、可视化与业务分析，输出可解释结论。",
+      "required_skills": [
+        { "skill": "SQL", "level": 4, "weight": 1.0, "reason": "取数核心" },
+        { "skill": "Excel/SQL BI", "level": 4, "weight": 0.8, "reason": "分析" },
+        { "skill": "Python", "level": 3, "weight": 0.7, "reason": "清洗" },
+        { "skill": "Statistics", "level": 3, "weight": 0.8, "reason": "分析基础" },
+        { "skill": "Data Visualization", "level": 3, "weight": 0.7, "reason": "可视化" },
+        { "skill": "MySQL", "level": 3, "weight": 0.7, "reason": "常用库" }
+      ]
+    },
+    {
+      "role_id": "RC009",
+      "role": "数据科学家",
+      "role_en": "Data Scientist",
+      "category": "Data",
+      "seniority": "高级",
+      "summary": "统计建模 + 机器学习，驱动业务增长与决策。",
+      "required_skills": [
+        { "skill": "Statistics", "level": 4, "weight": 1.0, "reason": "核心" },
+        { "skill": "Python", "level": 4, "weight": 1.0, "reason": "主语言" },
+        { "skill": "Machine Learning", "level": 4, "weight": 1.0, "reason": "建模" },
+        { "skill": "SQL", "level": 3, "weight": 0.8, "reason": "取数" },
+        { "skill": "Data Analysis", "level": 4, "weight": 0.8, "reason": "分析" },
+        { "skill": "Experimentation", "level": 3, "weight": 0.7, "reason": "实验" }
+      ]
+    },
+    {
+      "role_id": "RC010",
+      "role": "Java 后端工程师",
+      "role_en": "Java Backend Engineer",
+      "category": "Backend/Java",
+      "seniority": "中级",
+      "summary": "基于 Spring 生态构建业务后端，完成接口、存储与联调。",
+      "required_skills": [
+        { "skill": "Java", "level": 4, "weight": 1.0, "reason": "主语言" },
+        { "skill": "Spring Boot", "level": 4, "weight": 1.0, "reason": "核心框架" },
+        { "skill": "Spring Core/IoC", "level": 4, "weight": 0.9, "reason": "框架基础" },
+        { "skill": "MySQL", "level": 4, "weight": 0.9, "reason": "数据库" },
+        { "skill": "Redis", "level": 3, "weight": 0.7, "reason": "缓存" },
+        { "skill": "Spring Data JPA/MyBatis", "level": 3, "weight": 0.8, "reason": "持久层" },
+        { "skill": "Maven/Gradle", "level": 3, "weight": 0.7, "reason": "构建" },
+        { "skill": "Git", "level": 3, "weight": 0.6, "reason": "协作" }
+      ]
+    },
+    {
+      "role_id": "RC011",
+      "role": "Go 后端工程师",
+      "role_en": "Go Backend Engineer",
+      "category": "Backend/Go",
+      "seniority": "中级",
+      "summary": "用 Go 编写高并发微服务 / RPC，覆盖云原生与基础设施方向。",
+      "required_skills": [
+        { "skill": "Go", "level": 4, "weight": 1.0, "reason": "主语言" },
+        { "skill": "MySQL", "level": 4, "weight": 0.8, "reason": "存储" },
+        { "skill": "Redis", "level": 4, "weight": 0.8, "reason": "缓存" },
+        { "skill": "gRPC", "level": 3, "weight": 0.7, "reason": "RPC" },
+        { "skill": "Kafka", "level": 3, "weight": 0.7, "reason": "消息" },
+        { "skill": "Microservices", "level": 3, "weight": 0.8, "reason": "架构" },
+        { "skill": "Docker", "level": 3, "weight": 0.6, "reason": "部署" }
+      ]
+    },
+    {
+      "role_id": "RC012",
+      "role": "Node.js 后端工程师",
+      "role_en": "Node.js Backend Engineer",
+      "category": "Backend/Node",
+      "seniority": "中级",
+      "summary": "用 Node.js/TypeScript 构建 BFF 或微服务，强调异步与生态整合。",
+      "required_skills": [
+        { "skill": "Node.js", "level": 4, "weight": 1.0, "reason": "运行时" },
+        { "skill": "TypeScript", "level": 4, "weight": 0.9, "reason": "类型工程" },
+        { "skill": "Express/NestJS", "level": 4, "weight": 1.0, "reason": "框架" },
+        { "skill": "MySQL", "level": 3, "weight": 0.7, "reason": "存储" },
+        { "skill": "Redis", "level": 3, "weight": 0.7, "reason": "缓存" },
+        { "skill": "API Design", "level": 3, "weight": 0.7, "reason": "接口" },
+        { "skill": "Git", "level": 3, "weight": 0.6, "reason": "协作" }
+      ]
+    },
+    {
+      "role_id": "RC013",
+      "role": "Python 后端工程师",
+      "role_en": "Python Backend Engineer",
+      "category": "Backend/Python",
+      "seniority": "中级",
+      "summary": "用 Python 生态构建 API 服务与数据处理后端。",
+      "required_skills": [
+        { "skill": "Python", "level": 4, "weight": 1.0, "reason": "主语言" },
+        { "skill": "FastAPI", "level": 4, "weight": 1.0, "reason": "API 框架" },
+        { "skill": "PostgreSQL", "level": 3, "weight": 0.8, "reason": "存储" },
+        { "skill": "Redis", "level": 3, "weight": 0.7, "reason": "缓存" },
+        { "skill": "SQLAlchemy", "level": 3, "weight": 0.7, "reason": "ORM" },
+        { "skill": "Docker", "level": 3, "weight": 0.6, "reason": "部署" },
+        { "skill": "API Design", "level": 3, "weight": 0.7, "reason": "接口" }
+      ]
+    },
+    {
+      "role_id": "RC014",
+      "role": "后端架构师",
+      "role_en": "Backend Architect",
+      "category": "Backend/Architecture",
+      "seniority": "高级",
+      "summary": "负责系统拆分、技术选型、容量规划与演进路径。",
+      "required_skills": [
+        { "skill": "System Design", "level": 5, "weight": 1.0, "reason": "核心" },
+        { "skill": "Microservices", "level": 5, "weight": 1.0, "reason": "架构风格" },
+        { "skill": "分布式系统", "level": 4, "weight": 1.0, "reason": "基础" },
+        { "skill": "MySQL", "level": 4, "weight": 0.8, "reason": "存储设计" },
+        { "skill": "Kafka", "level": 4, "weight": 0.8, "reason": "消息" },
+        { "skill": "Kubernetes", "level": 3, "weight": 0.7, "reason": "运行平台" },
+        { "skill": "多云基础设施", "level": 3, "weight": 0.6, "reason": "基础设施" }
+      ]
+    },
+    {
+      "role_id": "RC015",
+      "role": "前端工程师",
+      "role_en": "Frontend Engineer",
+      "category": "Frontend",
+      "seniority": "中级",
+      "summary": "用现代框架构建交互界面，关注性能与工程化。",
+      "required_skills": [
+        { "skill": "Vue", "level": 4, "weight": 1.0, "reason": "框架" },
+        { "skill": "TypeScript", "level": 4, "weight": 0.9, "reason": "类型工程" },
+        { "skill": "HTML/CSS", "level": 4, "weight": 0.9, "reason": "基础" },
+        { "skill": "JavaScript", "level": 4, "weight": 1.0, "reason": "语言" },
+        { "skill": "State Management", "level": 3, "weight": 0.7, "reason": "状态" },
+        { "skill": "UI/UX", "level": 3, "weight": 0.6, "reason": "体验" },
+        { "skill": "Git", "level": 3, "weight": 0.5, "reason": "协作" }
+      ]
+    },
+    {
+      "role_id": "RC016",
+      "role": "全栈工程师",
+      "role_en": "Fullstack Engineer",
+      "category": "Fullstack",
+      "seniority": "中级",
+      "summary": "端到端交付前后端与部署，突出广度与快速交付。",
+      "required_skills": [
+        { "skill": "Vue/React", "level": 3, "weight": 0.9, "reason": "前端" },
+        { "skill": "Node.js", "level": 4, "weight": 0.9, "reason": "后端" },
+        { "skill": "TypeScript", "level": 4, "weight": 0.8, "reason": "通用语言" },
+        { "skill": "MySQL", "level": 3, "weight": 0.8, "reason": "存储" },
+        { "skill": "Redis", "level": 3, "weight": 0.7, "reason": "缓存" },
+        { "skill": "Docker", "level": 3, "weight": 0.6, "reason": "部署" },
+        { "skill": "API Design", "level": 3, "weight": 0.7, "reason": "接口" }
+      ]
+    },
+    {
+      "role_id": "RC017",
+      "role": "数据库工程师（DBA）",
+      "role_en": "Database Engineer",
+      "category": "Data/Infra",
+      "seniority": "中级",
+      "summary": "负责数据库选型、调优、高可用与备份恢复。",
+      "required_skills": [
+        { "skill": "PostgreSQL", "level": 5, "weight": 1.0, "reason": "核心" },
+        { "skill": "MySQL", "level": 5, "weight": 1.0, "reason": "核心" },
+        { "skill": "SQL", "level": 5, "weight": 1.0, "reason": "基础" },
+        { "skill": "索引优化", "level": 4, "weight": 0.9, "reason": "调优" },
+        { "skill": "Redis", "level": 3, "weight": 0.6, "reason": "缓存库" },
+        { "skill": "Linux", "level": 3, "weight": 0.6, "reason": "运维" }
+      ]
+    },
+    {
+      "role_id": "RC018",
+      "role": "大数据工程师",
+      "role_en": "Big Data Engineer",
+      "category": "Data",
+      "seniority": "中级",
+      "summary": "搭建并维护离线/实时数据管道，处理海量数据。",
+      "required_skills": [
+        { "skill": "Spark", "level": 4, "weight": 1.0, "reason": "计算引擎" },
+        { "skill": "Kafka", "level": 4, "weight": 1.0, "reason": "消息流" },
+        { "skill": "Hadoop", "level": 3, "weight": 0.8, "reason": "生态" },
+        { "skill": "Java", "level": 3, "weight": 0.8, "reason": "开发" },
+        { "skill": "SQL", "level": 3, "weight": 0.7, "reason": "查询" },
+        { "skill": "Linux", "level": 3, "weight": 0.7, "reason": "运维" }
+      ]
+    },
+    {
+      "role_id": "RC019",
+      "role": "数据仓库工程师",
+      "role_en": "Data Warehouse Engineer",
+      "category": "Data",
+      "seniority": "中级",
+      "summary": "建模、分层、调度 ETL，支撑报表与下游分析。",
+      "required_skills": [
+        { "skill": "SQL", "level": 5, "weight": 1.0, "reason": "核心" },
+        { "skill": "数据建模", "level": 4, "weight": 1.0, "reason": "建模" },
+        { "skill": "ETL", "level": 4, "weight": 1.0, "reason": "管道" },
+        { "skill": "Hive", "level": 3, "weight": 0.7, "reason": "数仓" },
+        { "skill": "Spark", "level": 3, "weight": 0.7, "reason": "计算" },
+        { "skill": "调度系统", "level": 3, "weight": 0.6, "reason": "编排" }
+      ]
+    },
+    {
+      "role_id": "RC020",
+      "role": "DevOps 工程师",
+      "role_en": "DevOps Engineer",
+      "category": "DevOps",
+      "seniority": "中级",
+      "summary": "CI/CD、容器化与自动化运维，缩短交付周期。",
+      "required_skills": [
+        { "skill": "Docker", "level": 4, "weight": 1.0, "reason": "容器" },
+        { "skill": "Kubernetes", "level": 4, "weight": 1.0, "reason": "编排" },
+        { "skill": "CI/CD", "level": 4, "weight": 0.9, "reason": "流水线" },
+        { "skill": "Git", "level": 4, "weight": 0.8, "reason": "版本" },
+        { "skill": "Linux", "level": 4, "weight": 0.9, "reason": "基础" },
+        { "skill": "Terraform/IaC", "level": 3, "weight": 0.7, "reason": "基础设施即代码" },
+        { "skill": "云平台", "level": 3, "weight": 0.7, "reason": "云上" }
+      ]
+    },
+    {
+      "role_id": "RC021",
+      "role": "SRE 工程师",
+      "role_en": "SRE Engineer",
+      "category": "DevOps",
+      "seniority": "高级",
+      "summary": "以可观测性与容量实现系统可靠性目标，自动消除运维托底。",
+      "required_skills": [
+        { "skill": "Kubernetes", "level": 4, "weight": 1.0, "reason": "运行平台" },
+        { "skill": "Linux", "level": 5, "weight": 1.0, "reason": "基础" },
+        { "skill": "可观测性", "level": 4, "weight": 1.0, "reason": "监控链路" },
+        { "skill": "Python/Go", "level": 3, "weight": 0.7, "reason": "自动化" },
+        { "skill": "Terraform/IaC", "level": 3, "weight": 0.7, "reason": "IaC" },
+        { "skill": "容量规划", "level": 3, "weight": 0.8, "reason": "可靠性" }
+      ]
+    },
+    {
+      "role_id": "RC022",
+      "role": "云平台运维工程师",
+      "role_en": "Cloud Ops Engineer",
+      "category": "DevOps/Cloud",
+      "seniority": "中级",
+      "summary": "公有云资源、网络、权限与安全基线运维。",
+      "required_skills": [
+        { "skill": "云平台", "level": 4, "weight": 1.0, "reason": "核心" },
+        { "skill": "Linux", "level": 4, "weight": 1.0, "reason": "基础" },
+        { "skill": "网络基础", "level": 4, "weight": 0.9, "reason": "网络" },
+        { "skill": "Terraform/IaC", "level": 3, "weight": 0.7, "reason": "IaC" },
+        { "skill": "脚本自动化", "level": 3, "weight": 0.7, "reason": "脚本" },
+        { "skill": "监控告警", "level": 3, "weight": 0.7, "reason": "监控" }
+      ]
+    },
+    {
+      "role_id": "RC023",
+      "role": "软件测试工程师",
+      "role_en": "Test Engineer",
+      "category": "Quality",
+      "seniority": "初级",
+      "summary": "功能/接口/兼容性测试，保障发布质量。",
+      "required_skills": [
+        { "skill": "手工测试", "level": 4, "weight": 1.0, "reason": "核心" },
+        { "skill": "API Testing", "level": 4, "weight": 0.9, "reason": "接口" },
+        { "skill": "缺陷管理", "level": 3, "weight": 0.7, "reason": "流程" },
+        { "skill": "SQL", "level": 2, "weight": 0.5, "reason": "数据校验" },
+        { "skill": "Linux", "level": 2, "weight": 0.4, "reason": "环境" }
+      ]
+    },
+    {
+      "role_id": "RC024",
+      "role": "测试开发工程师",
+      "role_en": "SDET",
+      "category": "Quality",
+      "seniority": "中级",
+      "summary": "搭建自动化测试框架与质量平台，提升测试效率。",
+      "required_skills": [
+        { "skill": "Python", "level": 4, "weight": 1.0, "reason": "主语言" },
+        { "skill": "自动化测试", "level": 4, "weight": 1.0, "reason": "核心" },
+        { "skill": "API Testing", "level": 4, "weight": 0.9, "reason": "接口" },
+        { "skill": "CI/CD", "level": 3, "weight": 0.8, "reason": "流水线集" },
+        { "skill": "Pytest", "level": 4, "weight": 0.8, "reason": "框架" },
+        { "skill": "Docker", "level": 3, "weight": 0.6, "reason": "环境" }
+      ]
+    },
+    {
+      "role_id": "RC025",
+      "role": "企业级系统架构师",
+      "role_en": "Enterprise Architect",
+      "category": "Architecture",
+      "seniority": "高级",
+      "summary": "从业务出发做企业级架构设计、治理与标准化。",
+      "required_skills": [
+        { "skill": "System Design", "level": 5, "weight": 1.0, "reason": "核心" },
+        { "skill": "Microservices", "level": 5, "weight": 1.0, "reason": "架构风格" },
+        { "skill": "业务建模", "level": 4, "weight": 0.8, "reason": "DDD" },
+        { "skill": "分布式系统", "level": 5, "weight": 1.0, "reason": "基础" },
+        { "skill": "Kubernetes", "level": 3, "weight": 0.7, "reason": "平台" },
+        { "skill": "数据架构", "level": 3, "weight": 0.7, "reason": "数据" }
+      ]
+    },
+    {
+      "role_id": "RC026",
+      "role": "信息安全工程师",
+      "role_en": "Security Engineer",
+      "category": "Security",
+      "seniority": "中级",
+      "summary": "应用/基础设施安全评估、漏洞治理与安全建设。",
+      "required_skills": [
+        { "skill": "Web Security", "level": 4, "weight": 1.0, "reason": "核心" },
+        { "skill": "漏洞挖掘", "level": 3, "weight": 0.8, "reason": "攻防" },
+        { "skill": "Linux", "level": 3, "weight": 0.7, "reason": "基础" },
+        { "skill": "网络基础", "level": 3, "weight": 0.8, "reason": "网络攻击面" },
+        { "skill": "密钥管理", "level": 3, "weight": 0.7, "reason": "基础安全" },
+        { "skill": "审计", "level": 3, "weight": 0.6, "reason": "合规" }
+      ]
+    },
+    {
+      "role_id": "RC027",
+      "role": "软件研发工程师（通用）",
+      "role_en": "Software Engineer",
+      "category": "General",
+      "seniority": "初级",
+      "summary": "行业通用的软件开发与交付，突出工程基础与可塑性。",
+      "required_skills": [
+        { "skill": "编程基础（任一主语言）", "level": 4, "weight": 1.0, "reason": "基础" },
+        { "skill": "Algorithms & Data Structures", "level": 3, "weight": 0.9, "reason": "通用" },
+        { "skill": "Git", "level": 3, "weight": 0.8, "reason": "协作" },
+        { "skill": "SQL", "level": 2, "weight": 0.6, "reason": "存储" },
+        { "skill": "Linux", "level": 2, "weight": 0.5, "reason": "环境" },
+        { "skill": "HTTP/网络", "level": 2, "weight": 0.6, "reason": "基础" }
+      ]
+    },
+    {
+      "role_id": "RC028",
+      "role": "移动端工程师",
+      "role_en": "Mobile Engineer",
+      "category": "App",
+      "seniority": "中级",
+      "summary": "Android/iOS 或跨端框架应用开发。",
+      "required_skills": [
+        { "skill": "Kotlin", "level": 4, "weight": 1.0, "reason": "Android" },
+        { "skill": "Swift", "level": 3, "weight": 0.7, "reason": "iOS" },
+        { "skill": "Android/iOS 平台", "level": 4, "weight": 1.0, "reason": "平台" },
+        { "skill": "Kotlin/Java 网络与存储", "level": 3, "weight": 0.7, "reason": "工程" },
+        { "skill": "REST API 对接", "level": 3, "weight": 0.7, "reason": "联调" }
+      ]
+    },
+    {
+      "role_id": "RC029",
+      "role": "云原生工程师",
+      "role_en": "Cloud Native Engineer",
+      "category": "DevOps/Cloud",
+      "seniority": "高级",
+      "summary": "容器化、服务网格与云上架构，服务以云原生产方式运行。",
+      "required_skills": [
+        { "skill": "Kubernetes", "level": 5, "weight": 1.0, "reason": "核心" },
+        { "skill": "Docker", "level": 5, "weight": 1.0, "reason": "容器" },
+        { "skill": "服务网格", "level": 3, "weight": 0.7, "reason": "流量治理" },
+        { "skill": "Terraform/IaC", "level": 4, "weight": 0.8, "reason": "IaC" },
+        { "skill": "云平台", "level": 4, "weight": 0.8, "reason": "云上" },
+        { "skill": "可观测性", "level": 3, "weight": 0.7, "reason": "监控" }
+      ]
+    },
+    {
+      "role_id": "RC030",
+      "role": "MLOps/ML 平台工程师",
+      "role_en": "MLOps Engineer",
+      "category": "AI/Infra",
+      "seniority": "高级",
+      "summary": "建设模型训练/推理/实验管理平台，支撑算法规模化上线。",
+      "required_skills": [
+        { "skill": "Python", "level": 4, "weight": 1.0, "reason": "主语言" },
+        { "skill": "MLOps", "level": 4, "weight": 1.0, "reason": "流水线" },
+        { "skill": "Docker", "level": 4, "weight": 1.0, "reason": "容器" },
+        { "skill": "Kubernetes", "level": 4, "weight": 1.0, "reason": "编排" },
+        { "skill": "PyTorch", "level": 3, "weight": 0.8, "reason": "训练接入" },
+        { "skill": "实验管理", "level": 3, "weight": 0.7, "reason": "平台能力" },
+        { "skill": "可观测性", "level": 3, "weight": 0.7, "reason": "监控" }
+      ]
+    }
+  ]
+}

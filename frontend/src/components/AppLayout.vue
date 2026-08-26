@@ -21,7 +21,12 @@ const tone = {
       </div>
 
       <nav class="nav">
-        <RouterLink to="/" exact-active-class="active">对话</RouterLink>
+        <RouterLink to="/" exact-active-class="active">工作台</RouterLink>
+        <RouterLink to="/graph" active-class="active">技能图谱</RouterLink>
+        <RouterLink to="/gap" active-class="active">缺口报告</RouterLink>
+        <RouterLink to="/plan" active-class="active">学习计划</RouterLink>
+        <RouterLink to="/practice" active-class="active">实践·评估</RouterLink>
+        <RouterLink to="/chat" active-class="active">对话</RouterLink>
         <RouterLink to="/health" active-class="active">服务健康</RouterLink>
       </nav>
 

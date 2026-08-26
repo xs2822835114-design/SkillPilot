@@ -106,6 +106,18 @@ function useSuggestion(s) {
       </div>
 
       <ChatComposer :sending="chat.sending" @send="chat.sendMessage" />
+
+      <div class="stream-toggle">
+        <button
+          class="toggle"
+          :class="{ on: chat.streamingEnabled }"
+          title="流式开关：开=SSE 增量输出；关=一次性返回"
+          @click="chat.toggleStreaming"
+        >
+          <span class="dot" />
+          {{ chat.streamingEnabled ? '流式输出' : '非流式输出' }}
+        </button>
+      </div>
     </section>
   </div>
 </template>
@@ -226,5 +238,36 @@ function useSuggestion(s) {
   width: 100%;
   margin: 0 auto;
   padding: 0 20px;
+}
+.stream-toggle {
+  flex: none;
+  padding-bottom: 6px;
+  display: flex;
+  justify-content: center;
+}
+.toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-3);
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+}
+.toggle .dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--text-3);
+}
+.toggle.on {
+  color: var(--text-2);
+  border-color: var(--border-strong);
+}
+.toggle.on .dot {
+  background: #3fb27f;
+  box-shadow: 0 0 0 3px rgba(63, 178, 127, 0.18);
 }
 </style>

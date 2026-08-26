@@ -1,4 +1,5 @@
 <script setup>
+import TracePanel from './TracePanel.vue'
 defineProps({
   message: { type: Object, required: true },
 })
@@ -18,9 +19,12 @@ defineProps({
         {{ message.error || '请求失败，请稍后重试' }}
       </div>
       <p v-else class="text">{{ message.content || '…' }}</p>
-      <div v-if="message.reason && message.role === 'assistant'" class="meta">
-        {{ message.reason }}
-      </div>
+      <TracePanel
+        v-if="message.role === 'assistant' && (message.route || message.reason || (message.steps && message.steps.length))"
+        :route="message.route"
+        :reason="message.reason"
+        :steps="message.steps"
+      />
     </div>
 
     <!-- 用户头像在右 -->

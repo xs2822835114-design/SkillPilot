@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 
+import { streamChat, toChatPayload, STREAM_FLAG_KEY } from '@/api/chat'
 import { sendUserMessage, toUserFacingMessage } from '@/services/chatService'
 import {
   getDevUserId,
@@ -18,15 +19,14 @@ function nextMsgId() {
 
 /**
  * 聊天 Store：管理会话线程目录 + 当前线程 + 发送流程。
- * 数据来源两层：
- *  - 后端：消息真实处理结果（经 chatService）；
- *  - 本地：线程目录与消息历史（threadStorage，阶段 1 后端无列表接口）。
+ * 支持流式（SSE，走 /chat/stream）与非流式（/chat）两种，由 streamingEnabled 开关控制。
  */
 export const useChatStore = defineStore('chat', {
   state: () => ({
     threads: [],
     currentThreadId: null,
     sending: false,
+    streamingEnabled: localStorage.getItem(STREAM_FLAG_KEY) === '1',
   }),
 
   getters: {
@@ -80,7 +80,13 @@ export const useChatStore = defineStore('chat', {
       }
     },
 
-    /** 发送消息：本地追加 → 调服务 → 更新结果 */
+    /** 流式开关持久化 */
+    toggleStreaming() {
+      this.streamingEnabled = !this.streamingEnabled
+      localStorage.setItem(STREAM_FLAG_KEY, this.streamingEnabled ? '1' : '0')
+    },
+
+    /** 发送消息：本地追加 → 按开关走流式/非流式 → 更新结果 */
     async sendMessage(text) {
       const content = (text || '').trim()
       if (!content || this.sending) return
@@ -97,20 +103,24 @@ export const useChatStore = defineStore('chat', {
 
       this.sending = true
       try {
-        const result = await sendUserMessage({
-          userId: thread.user_id,
-          threadId: thread.thread_id,
-          message: content,
-        })
-        thread.messages.push({
-          id: nextMsgId(),
-          role: 'assistant',
-          content: result.reply,
-          route: result.route,
-          reason: result.reason,
-          steps: result.steps,
-          status: 'ok',
-        })
+        if (this.streamingEnabled) {
+          await this.streamMessage(thread, content)
+        } else {
+          const result = await sendUserMessage({
+            userId: thread.user_id,
+            threadId: thread.thread_id,
+            message: content,
+          })
+          thread.messages.push({
+            id: nextMsgId(),
+            role: 'assistant',
+            content: result.reply,
+            route: result.route,
+            reason: result.reason,
+            steps: result.steps,
+            status: 'ok',
+          })
+        }
       } catch (err) {
         thread.messages.push({
           id: nextMsgId(),
@@ -122,6 +132,78 @@ export const useChatStore = defineStore('chat', {
       } finally {
         this.sending = false
         this._touch(thread)
+      }
+    },
+
+    /**
+     * 流式发送：占位空消息 → SSE 逐段追加 → done 补齐 trace / 状态。
+     * SSE 异常时自动降级为非流式 /chat。
+     */
+    async streamMessage(thread, content) {
+      const bubble = {
+        id: nextMsgId(),
+        role: 'assistant',
+        content: '',
+        status: 'streaming',
+      }
+      thread.messages.push(bubble)
+
+      const done = new Promise((resolve) => {
+        streamChat(
+          toChatPayload({
+            userId: thread.user_id,
+            threadId: thread.thread_id,
+            message: content,
+          }),
+          {
+            onEvent: (evt) => {
+              if (evt.type === 'meta') {
+                bubble.route = evt.route
+                bubble.intent = evt.intent
+              } else if (evt.type === 'delta') {
+                bubble.content += evt.text || ''
+              } else if (evt.type === 'done') {
+                bubble.status = 'ok'
+                bubble.reason = bubble.reason || ''
+              }
+            },
+            onError: (err) => {
+              // 流式失效 → 降级非流式
+              this._fallbackNonStream(thread, content, bubble, err)
+              resolve()
+            },
+          },
+        ).then(resolve)
+      })
+      await done
+      if (bubble.status === 'streaming') {
+        bubble.status = 'error'
+        bubble.error = '回复未完整返回，请重试'
+      }
+    },
+
+    /** 流式失败且未产出内容时，降级到非流式补齐回复 */
+    async _fallbackNonStream(thread, content, bubble, err) {
+      if (bubble.content || this.sending) {
+        // 已有部分流式内容 → 保留，标注降级
+        bubble.status = bubble.content ? 'ok' : 'error'
+        if (!bubble.content) bubble.error = toUserFacingMessage(err)
+        return
+      }
+      try {
+        const result = await sendUserMessage({
+          userId: thread.user_id,
+          threadId: thread.thread_id,
+          message: content,
+        })
+        bubble.content = result.reply
+        bubble.route = result.route
+        bubble.reason = result.reason
+        bubble.steps = result.steps
+        bubble.status = 'ok'
+      } catch (err2) {
+        bubble.status = 'error'
+        bubble.error = toUserFacingMessage(err2)
       }
     },
 

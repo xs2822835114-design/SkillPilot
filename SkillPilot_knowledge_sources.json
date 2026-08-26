@@ -1,0 +1,588 @@
+{
+  "project": "SkillPilot",
+  "description": "个人技术栈成长与能力规划智能体",
+  "version": "1.0",
+  "created_at": "2026-08-27",
+  "source_count": 40,
+  "source_policy": {
+    "primary": "官方技术文档",
+    "note": "岗位能力模型与行业数据建议作为第二批知识库加入；不要与核心技术知识混在同一 collection。"
+  },
+  "recommended_ingestion": {
+    "chunk_size": 800,
+    "chunk_overlap": 120,
+    "metadata_fields": [
+      "source_id",
+      "title",
+      "category",
+      "technology",
+      "type",
+      "priority",
+      "source_url",
+      "section",
+      "version"
+    ],
+    "retrieval": "vector + metadata filter；后续可增加 BM25/hybrid + reranker"
+  },
+  "sources": [
+    {
+      "id": "KB001",
+      "title": "Python Tutorial",
+      "category": "Python",
+      "technology": [
+        "Python"
+      ],
+      "type": "official-doc",
+      "priority": 5,
+      "url": "https://docs.python.org/3/tutorial/",
+      "description": "Python 官方教程，覆盖基础语法、数据结构、模块、类、异常、I/O、虚拟环境等。",
+      "crawl_mode": "web"
+    },
+    {
+      "id": "KB002",
+      "title": "Python Language Reference",
+      "category": "Python",
+      "technology": [
+        "Python"
+      ],
+      "type": "official-doc",
+      "priority": 4,
+      "url": "https://docs.python.org/3/reference/",
+      "description": "Python 语言参考，适合提取语法、核心语义和语言机制。",
+      "crawl_mode": "web"
+    },
+    {
+      "id": "KB003",
+      "title": "Python Standard Library",
+      "category": "Python",
+      "technology": [
+        "Python"
+      ],
+      "type": "official-doc",
+      "priority": 4,
+      "url": "https://docs.python.org/3/library/",
+      "description": "Python 标准库文档，用于识别常用标准库能力及工程实践。",
+      "crawl_mode": "web"
+    },
+    {
+      "id": "KB004",
+      "title": "Python venv",
+      "category": "Python Engineering",
+      "technology": [
+        "Python",
+        "venv"
+      ],
+      "type": "official-doc",
+      "priority": 4,
+      "url": "https://docs.python.org/3/library/venv.html",
+      "description": "Python 官方虚拟环境文档。",
+      "crawl_mode": "web"
+    },
+    {
+      "id": "KB005",
+      "title": "Python Packaging User Guide",
+      "category": "Python Engineering",
+      "technology": [
+        "Python",
+        "pip",
+        "Packaging"
+      ],
+      "type": "official-doc",
+      "priority": 5,
+      "url": "https://packaging.python.org/en/latest/",
+      "description": "Python Packaging Authority 官方指南，覆盖依赖管理、pyproject.toml、构建、发布和环境管理。",
+      "crawl_mode": "web"
+    },
+    {
+      "id": "KB006",
+      "title": "Flask Documentation",
+      "category": "Python Web",
+      "technology": [
+        "Flask"
+      ],
+      "type": "official-doc",
+      "priority": 5,
+      "url": "https://flask.palletsprojects.com/en/stable/",
+      "description": "Flask 官方文档，用于识别路由、请求、响应、Blueprint、中间件和部署等能力。",
+      "crawl_mode": "web"
+    },
+    {
+      "id": "KB007",
+      "title": "FastAPI Tutorial",
+      "category": "Python Web",
+      "technology": [
+        "FastAPI"
+      ],
+      "type": "official-doc",
+      "priority": 5,
+      "url": "https://fastapi.tiangolo.com/tutorial/",
+      "description": "FastAPI 官方教程，覆盖路由、请求体、参数校验、依赖注入、安全等 API 开发能力。",
+      "crawl_mode": "web"
+    },
+    {
+      "id": "KB008",
+      "title": "Django Documentation",
+      "category": "Python Web",
+      "technology": [
+        "Django"
+      ],
+      "type": "official-doc",
+      "priority": 4,
+      "url": "https://docs.djangoproject.com/en/6.0/",
+      "description": "Django 官方文档，覆盖模型、视图、中间件、数据库、测试和部署等完整 Web 开发能力。",
+      "crawl_mode": "web"
+    },
+    {
+      "id": "KB009",
+      "title": "Pydantic Documentation",
+      "category": "Python Engineering",
+      "technology": [
+        "Pydantic"
+      ],
+      "type": "official-doc",
+      "priority": 4,
+      "url": "https://docs.pydantic.dev/latest/",
+      "description": "Pydantic 官方文档，用于类型校验、数据模型和结构化输入输出能力识别。",
+      "crawl_mode": "web"
+    },
+    {
+      "id": "KB010",
+      "title": "PostgreSQL Documentation",
+      "category": "Database",
+      "technology": [
+        "PostgreSQL"
+      ],
+      "type": "official-doc",
+      "priority": 5,
+      "url": "https://www.postgresql.org/docs/",
+      "description": "PostgreSQL 官方文档，覆盖 SQL、事务、索引、并发、扩展与运维。",
+      "crawl_mode": "web"
+    },
+    {
+      "id": "KB011",
+      "title": "MySQL Documentation",
+      "category": "Database",
+      "technology": [
+        "MySQL"
+      ],
+      "type": "official-doc",
+      "priority": 5,
+      "url": "https://dev.mysql.com/doc/",
+      "description": "MySQL 官方文档，覆盖 SQL、索引、事务、优化和运维能力。",
+      "crawl_mode": "web"
+    },
+    {
+      "id": "KB012",
+      "title": "SQLAlchemy ORM Documentation",
+      "category": "Database / ORM",
+      "technology": [
+        "SQLAlchemy",
+        "ORM"
+      ],
+      "type": "official-doc",
+      "priority": 5,
+      "url": "https://docs.sqlalchemy.org/en/20/orm/",
+      "description": "SQLAlchemy 2.x ORM 文档，覆盖模型映射、关系、Session、查询和持久化。",
+      "crawl_mode": "web"
+    },
+    {
+      "id": "KB013",
+      "title": "SQLAlchemy Core Documentation",
+      "category": "Database / SQL",
+      "technology": [
+        "SQLAlchemy",
+        "SQL",
+        "Connection Pool"
+      ],
+      "type": "official-doc",
+      "priority": 5,
+      "url": "https://docs.sqlalchemy.org/en/20/core/",
+      "description": "SQLAlchemy Core 文档，覆盖 SQL Expression、Engine、连接、事务和连接池。",
+      "crawl_mode": "web"
+    },
+    {
+      "id": "KB014",
+      "title": "MongoDB Documentation",
+      "category": "Database",
+      "technology": [
+        "MongoDB"
+      ],
+      "type": "official-doc",
+      "priority": 4,
+      "url": "https://www.mongodb.com/docs/",
+      "description": "MongoDB 官方文档，覆盖文档数据库、数据建模、索引、查询和向量搜索。",
+      "crawl_mode": "web"
+    },
+    {
+      "id": "KB015",
+      "title": "Learn Java",
+      "category": "Java",
+      "technology": [
+        "Java"
+      ],
+      "type": "official-doc",
+      "priority": 5,
+      "url": "https://dev.java/learn/",
+      "description": "Java 官方学习入口，覆盖 Java 基础、JDK、运行、调试和现代 Java 能力。",
+      "crawl_mode": "web"
+    },
+    {
+      "id": "KB016",
+      "title": "Java Platform Documentation",
+      "category": "Java",
+      "technology": [
+        "Java",
+        "JDK"
+      ],
+      "type": "official-doc",
+      "priority": 4,
+      "url": "https://docs.oracle.com/en/java/",
+      "description": "Oracle Java 平台官方文档，适合提取 JDK/API 与平台能力。",
+      "crawl_mode": "web"
+    },
+    {
+      "id": "KB017",
+      "title": "Spring Boot Reference",
+      "category": "Java Web",
+      "technology": [
+        "Spring Boot",
+        "Java"
+      ],
+      "type": "official-doc",
+      "priority": 5,
+      "url": "https://docs.spring.io/spring-boot/reference/",
+      "description": "Spring Boot 官方参考文档，覆盖配置、Web、数据访问、测试、部署等。",
+      "crawl_mode": "web"
+    },
+    {
+      "id": "KB018",
+      "title": "Spring Framework Reference",
+      "category": "Java Framework",
+      "technology": [
+        "Spring",
+        "IoC",
+        "AOP",
+        "MVC"
+      ],
+      "type": "official-doc",
+      "priority": 5,
+      "url": "https://docs.spring.io/spring-framework/reference/",
+      "description": "Spring Framework 官方参考，覆盖 IoC、AOP、Web MVC、事务和数据访问等基础框架能力。",
+      "crawl_mode": "web"
+    },
+    {
+      "id": "KB019",
+      "title": "Vue Guide",
+      "category": "Frontend",
+      "technology": [
+        "Vue",
+        "Vue 3"
+      ],
+      "type": "official-doc",
+      "priority": 5,
+      "url": "https://vuejs.org/guide/",
+      "description": "Vue 3 官方指南，覆盖组件、响应式、Composition API 等。",
+      "crawl_mode": "web"
+    },
+    {
+      "id": "KB020",
+      "title": "React Learn",
+      "category": "Frontend",
+      "technology": [
+        "React"
+      ],
+      "type": "official-doc",
+      "priority": 4,
+      "url": "https://react.dev/learn",
+      "description": "React 官方学习文档，覆盖组件、状态、事件、Hooks 等。",
+      "crawl_mode": "web"
+    },
+    {
+      "id": "KB021",
+      "title": "TypeScript Handbook",
+      "category": "Frontend / Language",
+      "technology": [
+        "TypeScript"
+      ],
+      "type": "official-doc",
+      "priority": 5,
+      "url": "https://www.typescriptlang.org/docs/handbook/intro.html",
+      "description": "TypeScript 官方 Handbook，覆盖类型系统、泛型、模块与高级类型。",
+      "crawl_mode": "web"
+    },
+    {
+      "id": "KB022",
+      "title": "MDN Web Docs",
+      "category": "Web Fundamentals",
+      "technology": [
+        "HTML",
+        "CSS",
+        "JavaScript",
+        "HTTP",
+        "Web"
+      ],
+      "type": "reference-doc",
+      "priority": 5,
+      "url": "https://developer.mozilla.org/en-US/docs/Web",
+      "description": "MDN Web 平台参考，覆盖 HTML、CSS、JavaScript、HTTP、Web API 等基础。",
+      "crawl_mode": "web"
+    },
+    {
+      "id": "KB023",
+      "title": "LangChain Overview",
+      "category": "AI Agent",
+      "technology": [
+        "LangChain"
+      ],
+      "type": "official-doc",
+      "priority": 5,
+      "url": "https://docs.langchain.com/oss/python/langchain/overview",
+      "description": "LangChain 官方总览，定义 Agent、模型、工具和框架定位。",
+      "crawl_mode": "web"
+    },
+    {
+      "id": "KB024",
+      "title": "LangChain Agents",
+      "category": "AI Agent",
+      "technology": [
+        "LangChain",
+        "Agent"
+      ],
+      "type": "official-doc",
+      "priority": 5,
+      "url": "https://docs.langchain.com/oss/python/langchain/agents",
+      "description": "LangChain Agent 官方文档，覆盖 Agent 创建、工具调用、Middleware 与执行流程。",
+      "crawl_mode": "web"
+    },
+    {
+      "id": "KB025",
+      "title": "LangChain Tools",
+      "category": "AI Agent",
+      "technology": [
+        "LangChain",
+        "Tool Calling"
+      ],
+      "type": "official-doc",
+      "priority": 5,
+      "url": "https://docs.langchain.com/oss/python/langchain/tools",
+      "description": "LangChain Tools 官方文档，覆盖工具定义、参数、运行时和工具调用。",
+      "crawl_mode": "web"
+    },
+    {
+      "id": "KB026",
+      "title": "LangChain Retrieval",
+      "category": "RAG",
+      "technology": [
+        "LangChain",
+        "RAG",
+        "Retriever"
+      ],
+      "type": "official-doc",
+      "priority": 5,
+      "url": "https://docs.langchain.com/oss/python/langchain/retrieval",
+      "description": "LangChain Retrieval 官方文档，覆盖 2-step RAG、Agentic RAG、Hybrid RAG 与检索组件。",
+      "crawl_mode": "web"
+    },
+    {
+      "id": "KB027",
+      "title": "LangChain Long-term Memory",
+      "category": "AI Memory",
+      "technology": [
+        "LangChain",
+        "LangGraph",
+        "Long-term Memory"
+      ],
+      "type": "official-doc",
+      "priority": 5,
+      "url": "https://docs.langchain.com/oss/python/langchain/long-term-memory",
+      "description": "LangChain 长期记忆官方文档，覆盖跨会话 Store、namespace/key 与读写长期记忆。",
+      "crawl_mode": "web"
+    },
+    {
+      "id": "KB028",
+      "title": "LangChain Middleware Overview",
+      "category": "AI Agent",
+      "technology": [
+        "LangChain",
+        "Middleware"
+      ],
+      "type": "official-doc",
+      "priority": 5,
+      "url": "https://docs.langchain.com/oss/python/langchain/middleware/overview",
+      "description": "LangChain Middleware 官方概览，覆盖 Agent 生命周期控制、拦截、护栏和可观测性。",
+      "crawl_mode": "web"
+    },
+    {
+      "id": "KB029",
+      "title": "LangGraph Documentation",
+      "category": "AI Agent / Workflow",
+      "technology": [
+        "LangGraph",
+        "State",
+        "Workflow"
+      ],
+      "type": "official-doc",
+      "priority": 5,
+      "url": "https://docs.langchain.com/oss/python/langgraph/",
+      "description": "LangGraph 官方文档，覆盖 State、Graph、Checkpoint、Human-in-the-loop 和可恢复工作流。",
+      "crawl_mode": "web"
+    },
+    {
+      "id": "KB030",
+      "title": "Pinecone Documentation",
+      "category": "Vector DB",
+      "technology": [
+        "Pinecone",
+        "Vector Search",
+        "RAG"
+      ],
+      "type": "official-doc",
+      "priority": 4,
+      "url": "https://docs.pinecone.io/",
+      "description": "Pinecone 官方文档，覆盖向量索引、语义检索、RAG 与检索应用。",
+      "crawl_mode": "web"
+    },
+    {
+      "id": "KB031",
+      "title": "Milvus Documentation",
+      "category": "Vector DB",
+      "technology": [
+        "Milvus",
+        "Vector Search",
+        "Hybrid Search"
+      ],
+      "type": "official-doc",
+      "priority": 4,
+      "url": "https://milvus.io/docs/",
+      "description": "Milvus 官方文档，覆盖向量相似度搜索、混合搜索、过滤、部署与 Agent 场景。",
+      "crawl_mode": "web"
+    },
+    {
+      "id": "KB032",
+      "title": "Qdrant Documentation",
+      "category": "Vector DB",
+      "technology": [
+        "Qdrant",
+        "Semantic Search",
+        "Hybrid Search"
+      ],
+      "type": "official-doc",
+      "priority": 4,
+      "url": "https://qdrant.tech/documentation/",
+      "description": "Qdrant 官方文档，覆盖向量搜索、过滤、混合查询、索引和多租户。",
+      "crawl_mode": "web"
+    },
+    {
+      "id": "KB033",
+      "title": "Weaviate Documentation",
+      "category": "Vector DB",
+      "technology": [
+        "Weaviate",
+        "Vector Search",
+        "RAG"
+      ],
+      "type": "official-doc",
+      "priority": 4,
+      "url": "https://weaviate.io/developers/weaviate",
+      "description": "Weaviate 官方文档，覆盖向量数据库、RAG、索引和查询。",
+      "crawl_mode": "web"
+    },
+    {
+      "id": "KB034",
+      "title": "Git Documentation",
+      "category": "Engineering",
+      "technology": [
+        "Git"
+      ],
+      "type": "official-doc",
+      "priority": 5,
+      "url": "https://git-scm.com/doc",
+      "description": "Git 官方文档，覆盖版本控制、分支、合并、提交和协作能力。",
+      "crawl_mode": "web"
+    },
+    {
+      "id": "KB035",
+      "title": "GitHub REST API Documentation",
+      "category": "Engineering / API",
+      "technology": [
+        "GitHub",
+        "REST API"
+      ],
+      "type": "official-doc",
+      "priority": 4,
+      "url": "https://docs.github.com/en/rest",
+      "description": "GitHub REST API 官方文档，适合后续实现仓库、代码和提交记录获取。",
+      "crawl_mode": "web"
+    },
+    {
+      "id": "KB036",
+      "title": "GitHub Actions Documentation",
+      "category": "DevOps",
+      "technology": [
+        "GitHub Actions",
+        "CI/CD"
+      ],
+      "type": "official-doc",
+      "priority": 4,
+      "url": "https://docs.github.com/en/actions",
+      "description": "GitHub Actions 官方文档，覆盖自动化、CI/CD、Runner 与 Workflow。",
+      "crawl_mode": "web"
+    },
+    {
+      "id": "KB037",
+      "title": "Docker Engine Documentation",
+      "category": "DevOps",
+      "technology": [
+        "Docker",
+        "Container"
+      ],
+      "type": "official-doc",
+      "priority": 5,
+      "url": "https://docs.docker.com/engine/",
+      "description": "Docker Engine 官方文档，覆盖镜像、容器、网络、存储和 Daemon/CLI 架构。",
+      "crawl_mode": "web"
+    },
+    {
+      "id": "KB038",
+      "title": "Kubernetes Documentation",
+      "category": "DevOps",
+      "technology": [
+        "Kubernetes",
+        "K8s"
+      ],
+      "type": "official-doc",
+      "priority": 4,
+      "url": "https://kubernetes.io/docs/home/",
+      "description": "Kubernetes 官方文档，覆盖 Workloads、服务、配置、部署和运维。",
+      "crawl_mode": "web"
+    },
+    {
+      "id": "KB039",
+      "title": "Redis Documentation",
+      "category": "Database / Cache",
+      "technology": [
+        "Redis",
+        "Cache"
+      ],
+      "type": "official-doc",
+      "priority": 5,
+      "url": "https://redis.io/docs/latest/",
+      "description": "Redis 官方文档，覆盖数据结构、缓存、持久化、客户端和搜索能力。",
+      "crawl_mode": "web"
+    },
+    {
+      "id": "KB040",
+      "title": "RabbitMQ Documentation",
+      "category": "Messaging",
+      "technology": [
+        "RabbitMQ",
+        "Message Queue"
+      ],
+      "type": "official-doc",
+      "priority": 4,
+      "url": "https://www.rabbitmq.com/docs",
+      "description": "RabbitMQ 官方文档，覆盖消息、交换机、队列、路由、可靠性和运维。",
+      "crawl_mode": "web"
+    }
+  ]
+}

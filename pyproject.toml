@@ -12,6 +12,12 @@ dependencies = [
     "psycopg[binary]>=3.2",
     "pydantic>=2.7",
     "python-dotenv>=1.0",
+    # 阶段 2 RAG
+    "langchain-text-splitters>=0.3.0",
+    "pgvector>=0.3.0",
+    "requests>=2.31",
+    # 阶段 2 网页正文抽取/清洗
+    "trafilatura>=1.8",
 ]
 
 [project.optional-dependencies]

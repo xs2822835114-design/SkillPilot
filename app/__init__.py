@@ -7,7 +7,15 @@ from flask import Flask
 
 from app.api.errors import register_error_handlers
 from app.api.routes.chat import chat_bp
+from app.api.routes.gap import gap_bp
 from app.api.routes.health import health_bp
+from app.api.routes.plan import plan_bp
+from app.api.routes.profile import profile_bp
+from app.api.routes.evaluation import eval_bp, practice_bp
+from app.api.routes.rag import rag_bp
+from app.api.routes.memory import memory_bp
+from app.api.routes.dashboard import dashboard_bp
+from app.api.routes.graph import graph_bp
 from app.config import Config
 from app.middleware.logging_middleware import setup_request_logging
 from app.middleware.trace import init_trace
@@ -31,6 +39,15 @@ def create_app(config: Config | None = None) -> Flask:
 
     app.register_blueprint(health_bp)
     app.register_blueprint(chat_bp)
+    app.register_blueprint(rag_bp)
+    app.register_blueprint(profile_bp)
+    app.register_blueprint(gap_bp)
+    app.register_blueprint(plan_bp)
+    app.register_blueprint(practice_bp)
+    app.register_blueprint(eval_bp)
+    app.register_blueprint(memory_bp)
+    app.register_blueprint(graph_bp)
+    app.register_blueprint(dashboard_bp)
 
     return app
 

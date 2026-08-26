@@ -1,0 +1,1 @@
+"""知识层包：阶段 2 RAG（loader/splitter/embeddings/vectorstore/retriever/qa_chain）。"""

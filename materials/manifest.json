@@ -1,0 +1,47 @@
+{
+  "items": [
+    {
+      "path": "notes/skillmap-project-note.md",
+      "title": "SkillMap 项目简介",
+      "category": "product",
+      "skill_tags": ["skillmap", "agent", "rag"],
+      "role_target": "ai_application_engineer",
+      "lang": "zh"
+    },
+    {
+      "path": "../docs/初学者学习指南.md",
+      "title": "SkillMap 项目代码学习指南（面向初学者）",
+      "category": "guide",
+      "skill_tags": ["skillmap", "onboarding", "langgraph"],
+      "lang": "zh"
+    },
+    {
+      "path": "../docs/api_v1.md",
+      "title": "SkillMap API 文档",
+      "category": "api",
+      "skill_tags": ["api", "contract", "rest"],
+      "lang": "zh"
+    },
+    {
+      "path": "../项目规划/SkillMap_API接口文档.md",
+      "title": "SkillMap 接口设计文档（含 40+ 接口）",
+      "category": "api",
+      "skill_tags": ["api", "design", "rest"],
+      "lang": "zh"
+    },
+    {
+      "path": "../项目规划/SkillMap_阶段1_基础工程与Agent最小闭环_详细计划.md",
+      "title": "SkillMap 阶段 1：基础工程与 Agent 最小闭环详细计划",
+      "category": "design",
+      "skill_tags": ["planning", "phase1", "agent"],
+      "lang": "zh"
+    },
+    {
+      "path": "../项目规划/SkillMap_阶段2_技术知识库与RAG_详细计划.md",
+      "title": "SkillMap 阶段 2：技术知识库与 RAG 详细计划",
+      "category": "design",
+      "skill_tags": ["planning", "phase2", "rag"],
+      "lang": "zh"
+    }
+  ]
+}
