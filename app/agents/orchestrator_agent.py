@@ -1,8 +1,9 @@
-"""Orchestrator Agent —— 阶段 1 最小闭环：识别意图 → 结构化回复。
+"""Orchestrator Agent —— 对话入口：识别意图 → 结构化回复（引导到已上线的业务能力）。
 
 - LLM 可用（配置了 LLM_API_KEY）时使用 LLM + Structured Output；
 - LLM 不可用 / 调用失败时回退到规则实现，保证管道始终返回标准 JSON；
-- 上下文恢复：通过 State 中的 messages（Checkpointer 持久化）实现。
+- 上下文恢复：通过 State 中的 messages（Checkpointer 持久化）实现；
+- 精简后仅保留两条主线：普通对话 chat 与学习计划 plan_generation。
 """
 from __future__ import annotations
 
@@ -19,15 +20,13 @@ from app.orchestrator.state import SkillMapState
 
 logger = logging.getLogger(__name__)
 
-# 规则意图识别的关键词（阶段 1 占位，后续由业务 Agent 接管）
+# 规则意图识别的关键词（规则兜底，LLM 不可用时使用）
 _INTENT_KEYWORDS: dict[str, tuple[str, ...]] = {
-    "profile_update": ("我会", "我的技术栈", "我做过", "掌握", "熟悉", "了解", "会 java", "会python"),
-    "gap_analysis": ("缺口", "差距", "缺什么", "转型", "转行", "目标岗位", "需要学什么", "怎么入门"),
-    "plan_generation": ("学习计划", "学习路线", "规划", "路线", "多久能"),
-    "practice": ("实践", "练手", "项目任务", "动手"),
-    "evaluation": ("评估", "评价我的", "帮我看看代码", "评分"),
-    "question": ("什么是", "是什么", "区别", "怎么用", "教程", "原理"),
+    "plan_generation": ("学习计划", "学习路线", "规划", "路线", "多久能", "我想学", "我要学", "想学", "学一下", "自学"),
 }
+
+# 非 chat 的业务意图（多轮追问续接用）
+_BUSINESS_INTENTS = {i for i in VALID_INTENTS if i != "chat"}
 
 
 class AgentOutput(BaseModel):
@@ -38,10 +37,6 @@ class AgentOutput(BaseModel):
     confidence: float = Field(ge=0.0, le=1.0, description="置信度 0-1")
     workflow_status: str = Field(default="done")
     artifacts: dict[str, Any] = Field(default_factory=dict)
-
-
-def _now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
 
 
 def _shorten(text: str, limit: int = 24) -> str:
@@ -120,6 +115,64 @@ class OrchestratorAgent(BaseAgent):
             logger.warning("LLM 调用失败，回退规则实现", exc_info=True)
             return None
 
+    # ---------------- 聊天回复：正常大语言模型对话（LLM 可用时） ----------------
+
+    def _get_chat_llm(self):
+        """用于自然对话的 LLM（温度较高，非结构化）。"""
+        if not self.config.llm_enabled:
+            return None
+        try:
+            from langchain_openai import ChatOpenAI
+
+            return ChatOpenAI(
+                model=self.config.llm_model,
+                base_url=self.config.llm_base_url,
+                api_key=self.config.llm_api_key,
+                temperature=0.7,
+            )
+        except Exception:  # noqa: BLE001
+            logger.warning("langchain_openai 不可用，聊天回退规则实现", exc_info=True)
+            return None
+
+    def _chat_reply_llm(self, message: str, history: list[dict]) -> str | None:
+        """用 LLM 生成自然对话回复；需要检索时注入网络参考；失败返回 None。"""
+        llm = self._get_chat_llm()
+        if not llm:
+            return None
+        try:
+            from langchain_core.prompts import ChatPromptTemplate
+
+            from app.agents.websearch import web_context
+
+            history_text = "\n".join(
+                f"{m['role']}: {m['content']}" for m in history[-10:]
+            )
+            ctx = web_context(message)
+            system = (
+                "你是 SkillMap 的学习与职业成长助手。请像普通的大语言模型一样自然、"
+                "友好、简洁地回答用户问题：先直接给出答案，需要时可以补充举例；"
+                "对话中保持与历史记录一致。"
+            )
+            if ctx:
+                system += (
+                    "\n\n用户的问题适合联网检索，以下是联网获取到的参考资料（[n] 为来源编号）。"
+                    "请结合这些资料作答：在关键结论后标注对应来源编号，如【来源[1]】；"
+                    "若资料与本问题无关或不足以回答，请如实说明。\n"
+                    "参考资料：\n" + ctx
+                )
+            prompt = ChatPromptTemplate.from_messages(
+                [
+                    ("system", system),
+                    ("human", "历史对话：\n{history}\n\n当前用户：{msg}"),
+                ]
+            )
+            resp = (prompt | llm).invoke({"history": history_text or "（无）", "msg": message})
+            content = (resp.content or "").strip()
+            return content or None
+        except Exception:  # noqa: BLE001
+            logger.warning("LLM 自然对话失败，回退规则实现", exc_info=True)
+            return None
+
     # ---------------- 规则兜底路径 ----------------
 
     def _classify_intent_rules(self, message: str, intent_hint: str | None) -> tuple[str, float]:
@@ -133,22 +186,21 @@ class OrchestratorAgent(BaseAgent):
     def _fallback(
         self, message: str, intent_hint: str | None, history: list[dict], turn: int
     ) -> dict[str, Any]:
+        """chat 意图的 LLM 不可用时的兜底回复（自然但不机械）。"""
         intent, confidence = self._classify_intent_rules(message, intent_hint)
         first_user = next((m["content"] for m in history if m["role"] == "user"), None)
-        context_note = (
-            f"我记得你之前提到过：「{_shorten(first_user)}」"
-            if first_user
-            else "这是我们本会话的第一条消息"
-        )
-        if intent == "chat":
+        if first_user and first_user.strip() != message:
             reply = (
-                f"收到你的消息（第 {turn} 轮对话）。{context_note}。"
-                "当前处于阶段 1（Agent 最小闭环），业务 Agent 将在后续阶段接入。"
+                f"结合你之前说的「{_shorten(first_user)}」，我们来继续这个话题。"
+                "你想聊技术、答疑，还是生成一份学习计划？"
             )
+        elif any(k in message for k in ("你好", "嗨", "hi", "hello", "在吗")):
+            reply = "你好呀，我是 SkillMap 学习助手。想聊技术、问问题，或生成一份学习计划都可以。"
         else:
             reply = (
-                f"我识别到你希望进行「{intent}」相关分析（第 {turn} 轮对话）。{context_note}。"
-                "该能力将在后续阶段（阶段 3~6）接入，当前先走通用问答。"
+                "我收到你的消息了。目前我还没接上大模型，先用规则兜底回应："
+                "你可以继续聊聊想学的技术、提问任何知识问题，"
+                "或告诉我目标岗位（如「帮我生成 Python 后端工程师的学习计划」）来规划学习路线。"
             )
         return {
             "intent": intent,
@@ -166,27 +218,41 @@ class OrchestratorAgent(BaseAgent):
         history = state.get("messages") or []  # Checkpointer 恢复的历史
         turn = len(history) // 2 + 1
 
-        output = self._run_with_llm(message, intent_hint, history) or self._fallback(
-            message, intent_hint, history, turn
-        )
+        # 意图识别：LLM 增强优先，失败走规则（确定性可重复）
+        output = self._run_with_llm(message, intent_hint, history) or {}
+        intent = output.get("intent") or self._classify_intent_rules(message, intent_hint)[0]
 
-        user_msg = {
-            "role": "user",
-            "content": message,
-            "intent_hint": intent_hint,
-            "created_at": _now_iso(),
-        }
-        assistant_msg = {
-            "role": "assistant",
-            "content": output["reply"],
-            "intent": output["intent"],
-            "created_at": _now_iso(),
-        }
+        # 多轮追问续接：上一轮 need_input（已给出业务意图但缺入参），本轮又无任何
+        # 业务关键词（视为用户在回答追问，如补说岗位名）→ 续接上一轮意图，仅用新消息重解析入参。
+        prev_status = state.get("workflow_status")
+        prev_intent = state.get("intent")
+        if (
+            intent == "chat"
+            and prev_status == "need_input"
+            and prev_intent in _BUSINESS_INTENTS
+        ):
+            intent = prev_intent
+
+        # 阶段 9：意图 → 结构化入参（目标岗位/代码块等），供路由节点消费
+        from app.agents import intent_parser
+
+        params = intent_parser.parse(self.config, message, intent)
+
+        # chat 意图由本 Agent 直接回复（LLM 自然对话优先，规则兜底）；业务意图交给路由节点
+        summary = ""
+        if intent == "chat":
+            summary = (
+                self._chat_reply_llm(message, history)
+                or output.get("reply")
+                or self._fallback(message, intent_hint, history, turn)["reply"]
+            )
 
         return {
-            "messages": list(history) + [user_msg, assistant_msg],
-            "intent": output["intent"],
+            "intent": intent,
+            "intent_params": params,
+            "summary": summary,
             "current_agent": self.name,
-            "workflow_status": output.get("workflow_status", "done"),
+            "workflow_status": "pending",
             "error": None,
+            "steps": ["intent_recognize"],
         }

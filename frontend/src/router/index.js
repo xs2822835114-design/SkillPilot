@@ -9,9 +9,25 @@ const routes = [
     children: [
       {
         path: '',
+        redirect: '/chat',
+      },
+      {
+        path: 'chat',
         name: 'chat',
         component: () => import('@/views/ChatView.vue'),
         meta: { title: '对话' },
+      },
+      {
+        path: 'graph',
+        name: 'graph',
+        component: () => import('@/views/SkillGraphView.vue'),
+        meta: { title: '技能图谱' },
+      },
+      {
+        path: 'plan',
+        name: 'plan',
+        component: () => import('@/views/LearningPlanView.vue'),
+        meta: { title: '学习计划' },
       },
       {
         path: 'health',

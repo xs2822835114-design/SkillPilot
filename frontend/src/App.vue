@@ -19,6 +19,5 @@ onMounted(() => {
 <style scoped>
 .app-shell {
   height: 100%;
-  overflow: hidden;
 }
 </style>

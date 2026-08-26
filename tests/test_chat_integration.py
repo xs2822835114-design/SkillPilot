@@ -23,7 +23,8 @@ def test_tc1_health(client):
 # ---------------- TC2 正常对话 ----------------
 
 def test_tc2_chat_ok(client):
-    resp = _chat(client, "T_T2", "我想转向 AI 应用开发")
+    # 「我想转向 AI 应用开发」阶段 9 起路由到 gap_analysis，此处用纯闲聊句验证 chat 兼容
+    resp = _chat(client, "T_T2", "你好，今天天气怎么样")
     assert resp.status_code == 200
     data = resp.get_json()
     assert data["code"] == 0
@@ -42,7 +43,7 @@ def test_tc3_context_recovery(client):
     second = _chat(client, "T_T3", "我还需要做什么准备？")
     assert second.status_code == 200
     reply = second.get_json()["data"]["reply"]
-    assert "第 2 轮对话" in reply          # 已恢复历史（第 1 轮）
+    assert "继续这个话题" in reply          # 已恢复历史，引导继续
     assert "想转向 AI 应用开发" in reply   # 引用了第一轮消息
 
 
@@ -86,7 +87,7 @@ def test_tc7_thread_isolation(client):
     _chat(client, "T_T7_A", "我想转向 AI 应用开发")
     resp_b = _chat(client, "T_T7_B", "今天天气怎么样")
     reply_b = resp_b.get_json()["data"]["reply"]
-    assert "第 1 轮对话" in reply_b          # 新会话，未污染
+    assert "收到你的消息" in reply_b         # 新会话，未污染（仅通用兜底）
     assert "想转向 AI 应用开发" not in reply_b
 
 
@@ -114,7 +115,11 @@ def test_tc8_unexpected_error_returns_500_without_detail(client, monkeypatch):
 
 
 def test_tc8b_llm_failure_falls_back(client, monkeypatch):
-    """LLM 调用失败应回退到规则实现（不抛裸异常到 HTTP 层）。"""
+    """LLM 调用失败应回退到规则实现（不抛裸异常到 HTTP 层）。
+
+    「什么是 RAG」为 question 意图，阶段 9 起路由到 rag_node；无 DB 时按设计降级为
+    degraded（HTTP 仍 200、code 仍 0），本用例守护的核心是"失败不抛裸异常"。
+    """
     from app.agents import orchestrator_agent as oa
 
     class _BoomLLM:
@@ -127,4 +132,4 @@ def test_tc8b_llm_failure_falls_back(client, monkeypatch):
     assert resp.status_code == 200
     body = resp.get_json()
     assert body["code"] == 0
-    assert body["data"]["workflow_status"] == "done"
+    assert body["data"]["workflow_status"] in ("done", "degraded")

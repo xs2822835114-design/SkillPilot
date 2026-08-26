@@ -20,9 +20,15 @@ class SkillMapState(TypedDict, total=False):
     learning_plan: dict
     practice_plan: dict
     evaluation_report: dict
+    interview_state: dict          # 阶段 10：AI 问答式评估会话状态（跨轮恢复）
     retrieved_evidence: list
     memory_context: dict
+    # 阶段 9：多 Agent 路由
+    intent_params: dict          # 意图 → 结构化入参（目标岗位/技能/代码块等）
+    summary: str                 # 业务节点产出的自然语言摘要（reply_node 拼接）
+    artifacts: dict              # 透传给前端的精简业务结果（无业务时为 {}）
     # 运行时
+    steps: list[str]         # 本轮已执行的节点/Agent 轨迹（intent_recognize → 业务节点 → reply）
     current_agent: str
     workflow_status: str
     error: dict | None

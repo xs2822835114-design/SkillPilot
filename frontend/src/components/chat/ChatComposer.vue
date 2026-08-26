@@ -6,7 +6,7 @@ const props = defineProps({
   disabled: { type: Boolean, default: false },
 })
 
-const emit = defineEmits(['send'])
+const emit = defineEmits(['send', 'stop'])
 
 const draft = ref('')
 
@@ -35,12 +35,14 @@ function onKeydown(e) {
         placeholder="给 SkillMap 发送消息…"
         @keydown="onKeydown"
       />
-      <button class="send" :disabled="sending || disabled || !draft.trim()" :title="sending ? '正在回复' : '发送'" @click="submit">
-        <svg v-if="!sending" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <button v-if="sending" class="send stop" title="停止生成" @click="emit('stop')">
+        <span class="stop-icon" />
+      </button>
+      <button v-else class="send" :disabled="disabled || !draft.trim()" title="发送" @click="submit">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <line x1="22" y1="2" x2="11" y2="13" />
           <polygon points="22 2 15 22 11 13 2 9 22 2" />
         </svg>
-        <span v-else class="spinner" />
       </button>
     </div>
     <p class="hint">SkillMap 可能会犯错，请核查重要信息。</p>
@@ -103,18 +105,14 @@ textarea:disabled {
   opacity: 0.2;
   cursor: not-allowed;
 }
-.spinner {
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
-  border: 2px solid rgba(255, 255, 255, 0.35);
-  border-top-color: #fff;
-  animation: spin 0.8s linear infinite;
+.stop-icon {
+  width: 12px;
+  height: 12px;
+  border-radius: 2px;
+  background: #fff;
 }
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
+.send.stop {
+  background: var(--danger, #dc2626);
 }
 .hint {
   margin: 8px 0 0;

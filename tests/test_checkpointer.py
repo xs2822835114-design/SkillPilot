@@ -85,5 +85,5 @@ def test_tc4_restart_recovers_context(pg_ready):
     )
     assert r2.status_code == 200
     reply = r2.get_json()["data"]["reply"]
-    assert "第 2 轮对话" in reply
+    assert "继续这个话题" in reply          # 服务重启后仍恢复历史
     assert "想转向 AI 应用开发" in reply

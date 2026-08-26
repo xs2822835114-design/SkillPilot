@@ -3,11 +3,9 @@ import { nextTick, ref, watch } from 'vue'
 
 import ChatComposer from '@/components/chat/ChatComposer.vue'
 import ChatMessageBubble from '@/components/chat/ChatMessageBubble.vue'
-import ChatThreadsPanel from '@/components/chat/ChatThreadsPanel.vue'
 import { useChatStore } from '@/stores/chat'
 
 const chat = useChatStore()
-const sidebarOpen = ref(true)
 
 // 仅首次进入时恢复本地会话
 if (!chat.$state.currentThreadId) {
@@ -15,23 +13,40 @@ if (!chat.$state.currentThreadId) {
 }
 
 const listEl = ref(null)
+// 智能跟随滚动：仅在用户靠近底部时自动下滚，用户上翻时暂停跟随
+const stick = ref(true)
 
-function scrollToBottom() {
+function nearBottom() {
+  const el = listEl.value
+  if (!el) return true
+  return el.scrollHeight - el.scrollTop - el.clientHeight < 48
+}
+function onScroll() {
+  stick.value = nearBottom()
+}
+function scrollToBottom(smooth = false) {
   nextTick(() => {
-    if (listEl.value) listEl.value.scrollTop = listEl.value.scrollHeight
+    if (listEl.value && stick.value) {
+      listEl.value.scrollTo({ top: listEl.value.scrollHeight, behavior: smooth ? 'smooth' : 'auto' })
+    }
   })
 }
+// 新消息 & 流式增量时跟随滚动（只在靠近底部时）
 watch(
   () => chat.messages.length,
   () => scrollToBottom(),
 )
+watch(
+  () => chat.messages?.[chat.messages.length - 1]?.content,
+  () => scrollToBottom(true),
+)
 
-// 空状态起始提示（对齐阶段 1 意图枚举，模仿 ChatGPT 首页提问卡片）
+// 空状态起始提示（仅保留对话与学习计划能力）
 const suggestions = [
-  { emoji: '🎯', title: '我想转向 AI 应用开发', desc: '帮我梳理转型目标与能力盘点' },
+  { emoji: '🎯', title: '我想转向 AI 应用开发', desc: '帮我梳理转型目标与学习路线' },
   { emoji: '🗺️', title: '制定一个学习路线', desc: '根据我的技术基础规划学习路径' },
-  { emoji: '🧩', title: '我已经会 Python', desc: '补充我的技术栈与项目经验' },
-  { emoji: '📊', title: '评估我的能力水平', desc: '指出我的优势与差距并给建议' },
+  { emoji: '🐍', title: '我想学 Python', desc: '帮我生成入门到进阶的学习计划' },
+  { emoji: '🌐', title: '什么是向量数据库', desc: '联网检索最新资料并解答' },
 ]
 
 function useSuggestion(s) {
@@ -41,103 +56,61 @@ function useSuggestion(s) {
 
 <template>
   <div class="chat">
-    <ChatThreadsPanel
-      :threads="chat.threads"
-      :current-thread-id="chat.currentThreadId"
-      :hidden="!sidebarOpen"
-      @select="chat.selectThread"
-      @create="chat.createThread"
-      @remove="chat.removeThread"
-      @toggle="sidebarOpen = !sidebarOpen"
-    />
-
-    <section class="main">
-      <button v-if="!sidebarOpen" class="hamburger" title="展开侧栏" @click="sidebarOpen = true">
-        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
-          <line x1="3" y1="12" x2="21" y2="12" />
-          <line x1="3" y1="6" x2="21" y2="6" />
-          <line x1="3" y1="18" x2="21" y2="18" />
+    <div v-if="!chat.messages.length" ref="listEl" class="empty-wrap">
+      <div class="empty">
+        <!-- ChatGPT 风格彩色闪光 logo -->
+        <svg class="sparkle" width="44" height="44" viewBox="0 0 24 24" fill="none" role="img">
+          <defs>
+            <linearGradient id="sparkleGrad" x1="0" y1="0" x2="24" y2="24">
+              <stop offset="0" stop-color="#5ce1ff" />
+              <stop offset="0.3" stop-color="#7c5cff" />
+              <stop offset="0.6" stop-color="#ff5c8a" />
+              <stop offset="1" stop-color="#ffd166" />
+            </linearGradient>
+          </defs>
+          <path
+            fill="url(#sparkleGrad)"
+            d="M12 0 C12.9 5.9 16 10.9 24 12 C16 13.1 12.9 18.1 12 24 C11.1 18.1 8 13.1 0 12 C8 10.9 11.1 5.9 12 0 Z"
+          />
         </svg>
-      </button>
 
-      <div v-if="!chat.messages.length" ref="listEl" class="empty-wrap">
-        <div class="empty">
-          <!-- ChatGPT 风格彩色闪光 logo -->
-          <svg class="sparkle" width="44" height="44" viewBox="0 0 24 24" fill="none" role="img">
-            <defs>
-              <linearGradient id="sparkleGrad" x1="0" y1="0" x2="24" y2="24">
-                <stop offset="0" stop-color="#5ce1ff" />
-                <stop offset="0.3" stop-color="#7c5cff" />
-                <stop offset="0.6" stop-color="#ff5c8a" />
-                <stop offset="1" stop-color="#ffd166" />
-              </linearGradient>
-            </defs>
-            <path
-              fill="url(#sparkleGrad)"
-              d="M12 0 C12.9 5.9 16 10.9 24 12 C16 13.1 12.9 18.1 12 24 C11.1 18.1 8 13.1 0 12 C8 10.9 11.1 5.9 12 0 Z"
-            />
-          </svg>
+        <h1 class="title">今天有什么可以帮你？</h1>
+        <p class="subtitle">说出你的目标或技术背景，我来帮你梳理成长路线。</p>
 
-          <h1 class="title">今天有什么可以帮你？</h1>
-          <p class="subtitle">说出你的目标或技术背景，我来帮你梳理成长路线。</p>
-
-          <div class="cards">
-            <button
-              v-for="s in suggestions"
-              :key="s.title"
-              class="card"
-              :disabled="chat.sending"
-              @click="useSuggestion(s)"
-            >
-              <span class="card-emoji">{{ s.emoji }}</span>
-              <span class="card-text">
-                <span class="card-title">{{ s.title }}</span>
-                <span class="card-desc">{{ s.desc }}</span>
-              </span>
-            </button>
-          </div>
+        <div class="cards">
+          <button
+            v-for="s in suggestions"
+            :key="s.title"
+            class="card"
+            :disabled="chat.sending"
+            @click="useSuggestion(s)"
+          >
+            <span class="card-emoji">{{ s.emoji }}</span>
+            <span class="card-text">
+              <span class="card-title">{{ s.title }}</span>
+              <span class="card-desc">{{ s.desc }}</span>
+            </span>
+          </button>
         </div>
       </div>
+    </div>
 
-      <div v-else ref="listEl" class="messages">
-        <div class="thread">
-          <ChatMessageBubble v-for="m in chat.messages" :key="m.id" :message="m" />
-        </div>
+    <div v-else ref="listEl" class="messages" @scroll="onScroll">
+      <div class="thread">
+        <ChatMessageBubble v-for="m in chat.messages" :key="m.id" :message="m" />
       </div>
+    </div>
 
-      <ChatComposer :sending="chat.sending" @send="chat.sendMessage" />
-    </section>
+    <ChatComposer :sending="chat.sending" @send="chat.sendMessage" @stop="chat.stopGenerating" />
   </div>
 </template>
 
 <style scoped>
 .chat {
-  display: flex;
   height: 100%;
-  min-height: 0;
-  position: relative;
-}
-.main {
-  flex: 1;
-  min-width: 0;
   min-height: 0;
   display: flex;
   flex-direction: column;
-}
-.hamburger {
-  position: absolute;
-  z-index: 5;
-  top: 12px;
-  left: 12px;
-  width: 36px;
-  height: 36px;
-  border-radius: var(--radius-sm);
-  display: grid;
-  place-items: center;
-  color: var(--text-2);
-}
-.hamburger:hover {
-  background: var(--surface-hover);
 }
 /* 空状态 */
 .empty-wrap {

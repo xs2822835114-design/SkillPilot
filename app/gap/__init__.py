@@ -1,0 +1,1 @@
+"""Skill Graph / Gap 缺口分析层（阶段 4）：不感知 HTTP。"""
