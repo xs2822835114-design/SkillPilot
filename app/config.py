@@ -26,7 +26,9 @@ class Config:
     version: str = "v1.0.0"
     database_url: str = field(default_factory=lambda: os.getenv("DATABASE_URL", ""))
     llm_api_key: str = field(default_factory=lambda: os.getenv("LLM_API_KEY", ""))
-    llm_model: str = field(default_factory=lambda: os.getenv("LLM_MODEL", "gpt-4o-mini"))
+    llm_model: str = field(default_factory=lambda: os.getenv("LLM_MODEL", "deepseek-v4-flash"))
+    # OpenAI 兼容端点（DeepSeek 默认 https://api.deepseek.com）
+    llm_base_url: str = field(default_factory=lambda: os.getenv("LLM_BASE_URL", "https://api.deepseek.com"))
     log_level: str = field(default_factory=lambda: os.getenv("LOG_LEVEL", "INFO"))
     message_max_len: int = field(default_factory=lambda: _env_int("MESSAGE_MAX_LEN", 8000))
     max_attachments: int = field(default_factory=lambda: _env_int("MAX_ATTACHMENTS", 5))

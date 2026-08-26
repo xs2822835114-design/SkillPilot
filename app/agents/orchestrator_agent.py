@@ -65,7 +65,11 @@ class OrchestratorAgent(BaseAgent):
             try:
                 from langchain_openai import ChatOpenAI
 
-                self._llm = ChatOpenAI(model=self.config.llm_model, temperature=0)
+                self._llm = ChatOpenAI(
+                    model=self.config.llm_model,
+                    base_url=self.config.llm_base_url,
+                    temperature=0,
+                )
             except Exception:  # noqa: BLE001
                 logger.warning("langchain_openai 不可用，回退规则实现", exc_info=True)
                 self._llm = False
