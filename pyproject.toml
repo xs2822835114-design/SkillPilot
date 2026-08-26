@@ -1,0 +1,32 @@
+[project]
+name = "skillmap"
+version = "0.1.0"
+description = "SkillMap - 个人技术栈成长与能力规划智能体（阶段1：基础工程与Agent最小闭环）"
+requires-python = ">=3.10"
+dependencies = [
+    "flask>=3.0",
+    "langgraph>=1.0.0",
+    "langgraph-checkpoint-postgres>=2.0.0",
+    "langchain-core>=0.3.0",
+    "langchain-openai>=0.3.0",
+    "psycopg[binary]>=3.2",
+    "pydantic>=2.7",
+    "python-dotenv>=1.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-cov>=5.0",
+]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["app*", "scripts*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
