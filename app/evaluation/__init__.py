@@ -1,0 +1,1 @@
+"""能力评估层（阶段 6，Evaluation Agent 能力）。不感知 HTTP。"""
