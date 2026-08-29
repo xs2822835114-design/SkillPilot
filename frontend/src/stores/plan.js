@@ -1,11 +1,12 @@
 import { defineStore } from 'pinia'
 import { fetchPlanList, generatePlan, fetchPlanDetail, setTaskStatus, clearPlans } from '@/api/plan'
-import { DEMO_USER, DEMO_TARGET_ROLE } from '@/utils/demo'
+import { getDevUserId } from '@/utils/threadStorage'
+import { DEMO_TARGET_ROLE } from '@/utils/demo'
 
 /** 学习计划 Store（Learning Plan 页使用）。 */
 export const usePlanStore = defineStore('plan', {
   state: () => ({
-    userId: DEMO_USER,
+    userId: getDevUserId(),
     targetRole: DEMO_TARGET_ROLE,
     // Plan
     planList: [],

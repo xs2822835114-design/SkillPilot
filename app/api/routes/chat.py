@@ -84,11 +84,12 @@ def chat_stream():
             yield from streamer.stream_reply(
                 cfg, req.user_id, req.thread_id, req.message, req.intent_hint
             )
-        except Exception:  # noqa: BLE001 - 流式失败降级为一次性 error 事件，不让前端挂起
+        except Exception as exc:  # noqa: BLE001 - 流式失败降级为一次性 error 事件，不让前端挂起
             current_app.logger.warning("流式回复异常，降级为 error 事件", exc_info=True)
             import json
 
-            yield f"data: {json.dumps({'type': 'error', 'message': '流式输出异常，请刷新后重试'}, ensure_ascii=False)}\n\n"
+            detail = str(exc) or exc.__class__.__name__
+            yield f"data: {json.dumps({'type': 'error', 'message': f'流式输出异常：{detail}'}, ensure_ascii=False)}\n\n"
 
     return Response(
         stream_with_context(generate()), content_type="text/event-stream"

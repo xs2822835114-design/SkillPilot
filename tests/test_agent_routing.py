@@ -42,15 +42,31 @@ def test_a6b_plan_without_role_asks(client):
     assert "可选岗位" in data["reply"]
 
 
-def test_a6c_plan_without_role_or_skill_asks(client):
-    """TC-A6c：「我想学」无技能名 → 仍追问，但追问文案提示写法。"""
+def test_a6c_tech_learning_without_skill_asks(client):
+    """TC-A6c：「我想学」无技能名 → 技术学习意图，追问想学哪个技术/技能。"""
     resp = _chat(client, "A_T6C", "我想学")
     assert resp.status_code == 200
     data = resp.get_json()["data"]
-    assert data["route"] == "plan_generation"
+    assert data["route"] == "tech_learning"
     assert data["workflow_status"] == "need_input"
-    assert "可选岗位" in data["reply"]
-    assert "想学的技能" in data["reply"]
+    assert "学习" in data["reply"]
+    assert "技能" in data["reply"]
+
+
+def test_a2b_tech_learning_by_skill(client):
+    """TC-A2b：说「我想学 Flask」→ 技术学习意图，建立 Flask 目标画像后进入访谈（首轮追问）。"""
+    resp = _chat(client, "A_T2B", "我想学 Flask")
+    assert resp.status_code == 200
+    data = resp.get_json()["data"]
+    assert data["route"] == "tech_learning"
+    assert data["workflow_status"] == "need_input"
+    assert "skill_interview_agent" in data["steps"]
+    assert "Flask" in data["reply"]
+    art = data["artifacts"]
+    assert art["intent"] == "tech_learning"
+    assert art["target_profile"]["goal_name"] == "Flask"
+    skill_ids = {s["skill_id"] for s in art["target_profile"]["skills"]}
+    assert "flask" in skill_ids
 
 
 def test_a7_plan_degraded_without_db(client):
@@ -159,24 +175,6 @@ def test_a2_plan_routed_to_business(route_db_client):
     assert data["route"] == "plan_generation"
     assert data["workflow_status"] == "done"
     assert "任务" in data["reply"]
-    art = data["artifacts"]
-    assert art["intent"] == "plan_generation"
-    assert art["plan_id"]
-    assert art["goto"]["page"] == "plan"
-
-
-def test_a2b_plan_by_skill_resolves_role(route_db_client):
-    """TC-A2b：说「我想学 Flask」→ 技能反查为岗位 → 生成计划（不再追问目标岗位）。"""
-    data = _data(
-        route_db_client.post(
-            "/api/v1/chat",
-            json={"user_id": DEMO_USER, "thread_id": "A_T2B", "message": "我想学 Flask"},
-        )
-    )
-    assert data["route"] == "plan_generation"
-    assert data["workflow_status"] == "done"
-    assert "任务" in data["reply"]
-    assert "锁定" in data["reply"]  # 提示已按技能反查目标岗位
     art = data["artifacts"]
     assert art["intent"] == "plan_generation"
     assert art["plan_id"]

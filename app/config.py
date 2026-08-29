@@ -70,7 +70,8 @@ class Config:
     practice_llm_enabled: bool = field(default_factory=lambda: os.getenv("PRACTICE_LLM_ENABLED", "true").lower() == "true")
     # ---------- 阶段 10 AI 问答式能力评估 ----------
     interview_llm_enabled: bool = field(default_factory=lambda: os.getenv("INTERVIEW_LLM_ENABLED", "false").lower() == "true")
-    interview_question_count: int = field(default_factory=lambda: _env_int("INTERVIEW_QUESTION_COUNT", 5))
+    # 访谈题量上限：0 表示不设上限，按目标画像询问全部相关技能（目标 + 前置 + 子能力 + 关联）。
+    interview_question_count: int = field(default_factory=lambda: _env_int("INTERVIEW_QUESTION_COUNT", 0))
     # ---------- 阶段 7 长期记忆与 Middleware ----------
     memory_enabled: bool = field(default_factory=lambda: os.getenv("MEMORY_ENABLED", "true").lower() == "true")
     memory_embed_enabled: bool = field(default_factory=lambda: os.getenv("MEMORY_EMBED_ENABLED", "true").lower() == "true")

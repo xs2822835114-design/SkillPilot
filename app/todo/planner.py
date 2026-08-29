@@ -140,6 +140,7 @@ def _build_plan(
                     ),
                     status=TASK_DONE if done else "pending",
                     acceptance_criteria=explain.build_acceptance(name, delta),
+                    steps=explain.build_steps(name, delta),
                     resources=explain.resources_for_skill(config, skill, name),
                     required=not done,
                     order=order,

@@ -109,6 +109,7 @@ class LearningTask(BaseModel):
     estimated_hours: float = 4.0
     status: str = TASK_PENDING
     acceptance_criteria: str = ""
+    steps: list[str] = Field(default_factory=list)
     resources: list[LearningResource] = Field(default_factory=list)
     required: bool = False
     order: int = 0

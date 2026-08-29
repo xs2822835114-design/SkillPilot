@@ -43,6 +43,12 @@ defineEmits(['generate', 'toggle'])
             <span v-if="task.estimated_hours" class="hours">约 {{ task.estimated_hours }}h</span>
           </label>
           <p v-if="task.acceptance_criteria" class="acc">{{ task.acceptance_criteria }}</p>
+          <ol v-if="task.steps && task.steps.length" class="steps">
+            <li v-for="(s, i) in task.steps" :key="i">
+              <span class="step-dot">{{ i + 1 }}</span>
+              <span class="step-text">{{ s }}</span>
+            </li>
+          </ol>
         </div>
       </div>
     </template>
@@ -126,6 +132,39 @@ defineEmits(['generate', 'toggle'])
   margin: 6px 0 0 27px;
   font-size: 12px;
   color: var(--text-3);
+}
+.steps {
+  list-style: none;
+  margin: 8px 0 0 27px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.steps li {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 12.5px;
+  color: var(--text-2);
+  line-height: 1.5;
+}
+.step-dot {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  margin-top: 2px;
+  border-radius: 50%;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 10.5px;
+  font-weight: 600;
+  display: grid;
+  place-items: center;
+}
+.step-text {
+  flex: 1;
+  min-width: 0;
 }
 .primary {
   font-size: 13px;

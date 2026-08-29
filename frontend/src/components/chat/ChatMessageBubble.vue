@@ -1,6 +1,8 @@
 <script setup>
 import { computed } from 'vue'
 import { useRouter } from 'vue-router'
+import ArtifactPanel from './ArtifactPanel.vue'
+import InterviewQuestion from './InterviewQuestion.vue'
 import TracePanel from './TracePanel.vue'
 
 const props = defineProps({
@@ -12,9 +14,11 @@ const router = useRouter()
 const PAGE_PATH = {
   chat: '/chat',
   plan: '/plan',
+  graph: '/graph',
 }
 const GOTO_LABEL = {
   plan: '查看学习计划',
+  graph: '查看技能图谱',
   chat: '继续对话',
 }
 const goto = computed(() => props.message?.artifacts?.goto || null)
@@ -50,6 +54,15 @@ function goTo() {
       >
         {{ gotoLabel }} →
       </button>
+      <InterviewQuestion
+        v-if="message.role === 'assistant' && message.status === 'ok' && message.artifacts?.interview_question"
+        :question="message.artifacts.interview_question"
+        :message-id="message.id"
+      />
+      <ArtifactPanel
+        v-if="message.role === 'assistant' && message.status === 'ok'"
+        :artifacts="message.artifacts"
+      />
       <TracePanel
         v-if="message.role === 'assistant' && (message.route || message.reason || (message.steps && message.steps.length))"
         :route="message.route"

@@ -248,6 +248,7 @@ def create_todo_tables(conn) -> None:
           status             VARCHAR(24) NOT NULL DEFAULT 'pending',
           acceptance_criteria TEXT,
           resources_json     JSONB,
+          steps_json         JSONB,
           required           BOOLEAN NOT NULL DEFAULT false,
           started_at         TIMESTAMPTZ,
           finished_at        TIMESTAMPTZ,
@@ -258,6 +259,8 @@ def create_todo_tables(conn) -> None:
           ON learning_tasks(plan_id, phase_order, task_order);
         """
     )
+    # 既有库补齐步骤明细列（幂等；新库已在建表语句内创建）
+    conn.execute("ALTER TABLE learning_tasks ADD COLUMN IF NOT EXISTS steps_json JSONB")
     print("learning_plans / learning_tasks 表已就绪")
 
 

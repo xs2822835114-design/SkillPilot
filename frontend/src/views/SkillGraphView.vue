@@ -87,6 +87,25 @@ const planNotFound = computed(() => !plan.planLoading && !planNodes.value.length
 
     <SkillGraph :nodes="planNodes" :edges="planEdges" :loading="plan.planLoading || graph.loading" />
     <p class="meta">计划技能 {{ planNodes.length }} · 前置关系 {{ planEdges.length }} · 已掌握 {{ planNodes.filter((n) => n.mastered).length }}</p>
+
+    <section v-if="plan.currentPlan && plan.currentPlan.phases" class="detail">
+      <h2>学习环节明细</h2>
+      <p class="detail-hint">每个技能到可执行环节：建立概念 → 环境准备 → 核心用法 → 组合实践 → 进阶 → 验收复盘。</p>
+      <div v-for="(phase, pi) in plan.currentPlan.phases" :key="phase.phase_id || pi" class="detail-phase">
+        <h3 class="detail-phase-title">{{ phase.title || `阶段 ${pi + 1}` }}</h3>
+        <div v-for="task in phase.tasks" :key="task.task_id" class="detail-task">
+          <div class="detail-task-head">
+            <span class="detail-skill">{{ task.title }}</span>
+            <span class="detail-status" :class="{ done: task.status === 'done' }">
+              {{ task.status === 'done' ? '已掌握' : '待学习' }}
+            </span>
+          </div>
+          <ol v-if="task.steps && task.steps.length" class="detail-steps">
+            <li v-for="(s, si) in task.steps" :key="si">{{ s }}</li>
+          </ol>
+        </div>
+      </div>
+    </section>
   </div>
 </template>
 
@@ -122,6 +141,86 @@ const planNotFound = computed(() => !plan.planLoading && !planNodes.value.length
   margin: 10px 4px 0;
   color: var(--text-3);
   font-size: 13px;
+}
+.detail {
+  margin-top: 20px;
+}
+.detail h2 {
+  margin: 0 0 4px;
+  font-size: 17px;
+}
+.detail-hint {
+  margin: 0 0 14px;
+  color: var(--text-3);
+  font-size: 12.5px;
+}
+.detail-phase {
+  margin-bottom: 14px;
+}
+.detail-phase-title {
+  margin: 0 0 8px;
+  font-size: 14px;
+  font-weight: 600;
+}
+.detail-task {
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  margin-bottom: 8px;
+}
+.detail-task-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.detail-skill {
+  font-size: 13.5px;
+  font-weight: 500;
+}
+.detail-status {
+  flex: none;
+  font-size: 11px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--bg-soft);
+  border: 1px solid var(--border);
+  color: var(--text-3);
+}
+.detail-status.done {
+  background: rgba(63, 178, 127, 0.14);
+  border-color: rgba(63, 178, 127, 0.35);
+  color: #1f9d56;
+}
+.detail-steps {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  counter-reset: step;
+}
+.detail-steps li {
+  position: relative;
+  padding-left: 22px;
+  margin-bottom: 4px;
+  font-size: 12.5px;
+  color: var(--text-2);
+  line-height: 1.55;
+}
+.detail-steps li::before {
+  content: counter(step);
+  counter-increment: step;
+  position: absolute;
+  left: 0;
+  top: 2px;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 10px;
+  font-weight: 600;
+  text-align: center;
+  line-height: 15px;
 }
 .err {
   padding: 10px 14px;

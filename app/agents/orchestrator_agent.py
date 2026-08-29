@@ -3,7 +3,7 @@
 - LLM 可用（配置了 LLM_API_KEY）时使用 LLM + Structured Output；
 - LLM 不可用 / 调用失败时回退到规则实现，保证管道始终返回标准 JSON；
 - 上下文恢复：通过 State 中的 messages（Checkpointer 持久化）实现；
-- 精简后仅保留两条主线：普通对话 chat 与学习计划 plan_generation。
+- 顶层意图：chat / tech_learning / job_search / plan_generation（对齐架构方案第 4 节）。
 """
 from __future__ import annotations
 
@@ -20,9 +20,19 @@ from app.orchestrator.state import SkillMapState
 
 logger = logging.getLogger(__name__)
 
-# 规则意图识别的关键词（规则兜底，LLM 不可用时使用）
+# 规则意图识别的关键词（规则兜底，LLM 不可用时使用）。
+# 顺序有语义：job_search / plan_generation 的关键词比 tech_learning 更具体，
+# 需先匹配（如「学习计划」先于「学习」命中，避免误判）。
 _INTENT_KEYWORDS: dict[str, tuple[str, ...]] = {
-    "plan_generation": ("学习计划", "学习路线", "规划", "路线", "多久能", "我想学", "我要学", "想学", "学一下", "自学"),
+    "job_search": (
+        "找工作", "求职", "应聘", "面试", "招聘", "想找", "找份", "岗位", "跳槽", "offer",
+    ),
+    "plan_generation": (
+        "学习计划", "学习路线", "学习路径", "规划", "路线", "计划表", "多久能",
+    ),
+    "tech_learning": (
+        "我想学", "我要学", "想学", "自学", "学一下", "学习", "掌握", "入门", "精通", "提升",
+    ),
 }
 
 # 非 chat 的业务意图（多轮追问续接用）
@@ -63,6 +73,7 @@ class OrchestratorAgent(BaseAgent):
                 self._llm = ChatOpenAI(
                     model=self.config.llm_model,
                     base_url=self.config.llm_base_url,
+                    api_key=self.config.llm_api_key,
                     temperature=0,
                 )
             except Exception:  # noqa: BLE001
@@ -221,6 +232,14 @@ class OrchestratorAgent(BaseAgent):
         # 意图识别：LLM 增强优先，失败走规则（确定性可重复）
         output = self._run_with_llm(message, intent_hint, history) or {}
         intent = output.get("intent") or self._classify_intent_rules(message, intent_hint)[0]
+
+        # 意图校正：plan_generation 需要显式「计划/路线」类措辞；仅「想学某技能」
+        # 应走 tech_learning 完整闭环（目标画像 → 访谈 → 缺口），避免 LLM 混淆两者。
+        if intent == "plan_generation" and intent_hint not in VALID_INTENTS:
+            if not any(k in message for k in _INTENT_KEYWORDS["plan_generation"]) and any(
+                k in message for k in _INTENT_KEYWORDS["tech_learning"]
+            ):
+                intent = "tech_learning"
 
         # 多轮追问续接：上一轮 need_input（已给出业务意图但缺入参），本轮又无任何
         # 业务关键词（视为用户在回答追问，如补说岗位名）→ 续接上一轮意图，仅用新消息重解析入参。

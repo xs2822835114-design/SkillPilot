@@ -170,6 +170,10 @@ export const useChatStore = defineStore('chat', {
                 bubbleRef.status = 'ok'
                 bubbleRef.reason = bubbleRef.reason || ''
                 bubbleRef.artifacts = evt.artifacts || {}
+              } else if (evt.type === 'error') {
+                // 后端已明确报错：把真实错误暴露为气泡错误态，避免误报「回复未完整返回」
+                bubbleRef.status = 'error'
+                bubbleRef.error = evt.message || '流式输出异常，请重试'
               }
             },
             onError: (err) => {

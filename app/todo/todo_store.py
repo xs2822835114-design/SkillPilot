@@ -34,6 +34,7 @@ logger = logging.getLogger(__name__)
 def create_plan(config: Config, plan: LearningPlan, report: dict, skill_ids: list[str]) -> LearningPlan:
     """把计算好的 LearningPlan 落库（重跑计划时先按 plan_id 清旧任务再写）。"""
     with pgdb.connect(config) as conn:
+        _ensure_steps_column(conn)
         conn.execute(
             """
             DELETE FROM learning_tasks WHERE plan_id = %s
@@ -83,9 +84,9 @@ def _insert_task(conn, plan_id: str, phase: LearningPhase, task: LearningTask) -
         """
         INSERT INTO learning_tasks
           (id, plan_id, phase_id, phase_order, task_order, skill_id, title,
-           estimated_hours, status, acceptance_criteria, resources_json,
+           estimated_hours, status, acceptance_criteria, resources_json, steps_json,
            required, started_at, finished_at, created_at, updated_at)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, now(), now())
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, now(), now())
         """,
         (
             task.task_id,
@@ -99,6 +100,7 @@ def _insert_task(conn, plan_id: str, phase: LearningPhase, task: LearningTask) -
             task.status,
             task.acceptance_criteria,
             Jsonb([r.model_dump() for r in task.resources]),
+            Jsonb(task.steps),
             task.required,
             started_at,
             finished_at,
@@ -110,8 +112,14 @@ def _now() -> datetime:
     return datetime.now().astimezone()
 
 
+def _ensure_steps_column(conn) -> None:
+    """幂等补齐 learning_tasks.steps_json 列（历史库升级；新建库由 init_db 建表时已含）。"""
+    conn.execute("ALTER TABLE learning_tasks ADD COLUMN IF NOT EXISTS steps_json JSONB")
+
+
 def load_plan(config: Config, plan_id: str) -> LearningPlan | None:
     with pgdb.connect(config) as conn:
+        _ensure_steps_column(conn)
         conn.row_factory = dict_row
         row = conn.execute(
             "SELECT * FROM learning_plans WHERE id = %s", (plan_id,)
@@ -137,6 +145,7 @@ def load_plan(config: Config, plan_id: str) -> LearningPlan | None:
             estimated_hours=float(r["estimated_hours"] or 0),
             status=r["status"],
             acceptance_criteria=r["acceptance_criteria"] or "",
+            steps=list(r["steps_json"] or []),
             resources=[LearningResource(**x) for x in (r["resources_json"] or [])],
             required=bool(r["required"]),
             order=int(r["task_order"]),

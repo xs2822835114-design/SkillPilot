@@ -190,6 +190,7 @@ def test_tc_p2_fields_complete(db):
             assert t.estimated_hours > 0
             assert t.acceptance_criteria.strip()
             assert isinstance(t.resources, list)
+            assert t.steps, f"{t.skill_id} 缺少学习环节步骤"
     assert seen > 0
 
 
@@ -211,6 +212,9 @@ def test_tc_p4_persist_recover(db):
     assert loaded is not None
     assert loaded.phases and len(loaded.phases) == len(plan.phases)
     assert loaded.metrics.total_tasks == plan.metrics.total_tasks
+    # 步骤明细应能随任务一并持久化并恢复
+    loaded_steps = {t.skill_id: t.steps for ph in loaded.phases for t in ph.tasks}
+    assert any(loaded_steps.values()), "持久化后步骤明细丢失"
 
 
 # TC-P5 状态流转

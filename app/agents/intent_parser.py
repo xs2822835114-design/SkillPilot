@@ -85,8 +85,8 @@ class IntentParams(BaseModel):
     """路由节点消费的结构化入参。unanswered 非空表示需要用户补充信息（追问）。"""
 
     intent: str = "chat"
-    target_roles: list[str] = Field(default_factory=list)     # plan 用（目标岗位）
-    target_skills: list[dict] = Field(default_factory=list)   # [{"skill","level","weight"}]
+    target_roles: list[str] = Field(default_factory=list)     # plan/job 用（目标岗位 role_id）
+    target_skills: list[dict] = Field(default_factory=list)   # tech 用（[{"skill_id","skill_name","level","weight"}）
     skill_id: str | None = None                                # plan 用（想学的技能）
     unanswered: list[str] = Field(default_factory=list)        # 缺哪些入参
 
@@ -148,8 +148,8 @@ def _resolve_target_roles(config: Config, message: str) -> list[str]:
     return [best[0]]
 
 
-def _resolve_skill_id(config: Config, message: str) -> str | None:
-    """从消息中匹配技能字典（skills 表，含图谱同步节点）中的技能名，返回规范 id。
+def _resolve_skill(config: Config, message: str) -> dict | None:
+    """从消息中匹配技能词典（JSON/DB 均可用），返回 ``{id, name, domain}``。
 
     最长匹配优先，避免「SQL」误配「SQLite」这类短词；读取失败返回 None。
     """
@@ -157,22 +157,28 @@ def _resolve_skill_id(config: Config, message: str) -> str | None:
     if not norm:
         return None
     try:
-        from app.profile import store as profile_store
+        from app.knowledge import list_skills
 
-        rows = profile_store.load_skill_names(config)
+        skills = list_skills(config)
     except Exception:  # noqa: BLE001
-        logger.warning("读取技能字典失败，无法解析目标技能", exc_info=True)
+        logger.warning("读取技能词典失败，无法解析目标技能", exc_info=True)
         return None
-    best_id: str | None = None
+    best: dict | None = None
     best_len = 0
-    for row in rows:
-        key = _normalize(str(row.get("name") or ""))
+    for sk in skills:
+        key = _normalize(str(sk.get("name") or ""))
         if not key or len(key) <= best_len:
             continue
         if key in norm:
-            best_id = row.get("id")
+            best = sk
             best_len = len(key)
-    return best_id
+    return best
+
+
+def _resolve_skill_id(config: Config, message: str) -> str | None:
+    """从消息中匹配技能名，返回规范 id（供 plan_generation 反查技能所属岗位）。"""
+    sk = _resolve_skill(config, message)
+    return sk["id"] if sk else None
 
 
 def parse(config: Config, message: str, intent: str) -> dict[str, Any]:
@@ -191,6 +197,24 @@ def parse(config: Config, message: str, intent: str) -> dict[str, Any]:
         if skill_id:
             params.skill_id = skill_id
         if not roles and not skill_id:
+            params.need("target_roles")
+
+    elif intent == "tech_learning":
+        # 技术学习：从消息解析目标技能（如「我想学 LangGraph」→ langgraph）。
+        skill = _resolve_skill(config, message)
+        if skill:
+            params.target_skills = [
+                {"skill_id": skill["id"], "skill_name": skill["name"], "level": 3, "weight": 1.0}
+            ]
+        else:
+            params.need("target_skills")
+
+    elif intent == "job_search":
+        # 岗位求职：从消息解析目标岗位（如「我想找 AI Agent 工程师」→ RC002）。
+        roles = _resolve_target_roles(config, message)
+        if roles:
+            params.target_roles = roles
+        else:
             params.need("target_roles")
 
     return params.model_dump(mode="json")
