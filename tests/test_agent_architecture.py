@@ -136,14 +136,44 @@ def test_build_job_target_direct(cfg):
 # ---------------- 阶段 5/6：访谈 → 缺口 完整闭环 ----------------
 
 
+def test_interview_strategy_differs_by_skill_type(cfg):
+    """不同技能类型生成不同题型序列与题面（不再是同一套 0~5 模板）。"""
+    import app.agents.interview as iv
+    from app.agents.interview_strategy import build_strategy
+
+    def qtypes(sid):
+        sp = iv._profile_for(cfg, sid)
+        strategy = build_strategy(sp, cfg.interview_question_count)
+        slots = iv._plan_capabilities(sp, strategy)[: iv._per_skill_limit(cfg, strategy)]
+        return [qt.value for qt, _ in slots], [subj or qt.value for qt, subj in slots]
+
+    mech_types, mech_subj = qtypes("checkpoint")       # mechanism
+    fw_types, _ = qtypes("langgraph")                   # framework
+    api_types, _ = qtypes("llm_api")                    # api
+    pat_types, _ = qtypes("rag")                        # pattern
+
+    # 题型序列按 skill_type 分流
+    assert not _same_all(mech_types, fw_types, api_types, pat_types)
+    # mechanism 覆盖「场景」，题干锚定父框架能力点，而非空泛的「熟练度」
+    assert "scenario" in mech_types
+    assert any("checkpoint" in s or "state" in s.lower() for s in mech_subj)
+    # 前瞻性：api 类必含 API 题型，mechanism 不要求「implementation/独立实现」
+    assert "api" in api_types
+
+
+def _same_all(*seqs):
+    return all(s == seqs[0] for s in seqs[1:])
+
+
 def _finish_interview(client, tid: str, first_data: dict, answers_by_skill: dict, default: str = "我写过项目") -> dict:
     """逐轮回答访谈直到 done：每轮从 artifacts.interview_question 取当前 skill_id，
     用映射好的答案（缺省用 default）作答，返回最终 data。
 
-    题量已由固定 5 改为「按目标画像询问全部相关技能」，故这里用轮询而非硬编码长度。
+    题量已由固定 5 改为「按目标画像询问全部相关技能」+「每技能多个能力点」，
+    故这里用较宽松的轮询（而非硬编码长度）。
     """
     data = first_data
-    for _ in range(24):
+    for _ in range(80):
         if data.get("workflow_status") == "done":
             return data
         q = (data.get("artifacts") or {}).get("interview_question") or {}
