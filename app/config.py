@@ -69,9 +69,14 @@ class Config:
     practice_default_level_target: int = field(default_factory=lambda: _env_int("PRACTICE_DEFAULT_LEVEL_TARGET", 3))
     practice_llm_enabled: bool = field(default_factory=lambda: os.getenv("PRACTICE_LLM_ENABLED", "true").lower() == "true")
     # ---------- 阶段 10 AI 问答式能力评估 ----------
-    interview_llm_enabled: bool = field(default_factory=lambda: os.getenv("INTERVIEW_LLM_ENABLED", "false").lower() == "true")
+    interview_llm_enabled: bool = field(default_factory=lambda: os.getenv("INTERVIEW_LLM_ENABLED", "true").lower() == "true")
     # 访谈题量上限：0 表示不设上限，按目标画像询问全部相关技能（目标 + 前置 + 子能力 + 关联）。
     interview_question_count: int = field(default_factory=lambda: _env_int("INTERVIEW_QUESTION_COUNT", 0))
+    # ---------- 阶段 10b 学习计划直出（LearningPlanAgent） ----------
+    # 计划生成路径："direct" 直接生成（默认，跳过访谈） | "interview" 先访谈再生成（精准模式，保留旧链路）。
+    learning_plan_mode: str = field(default_factory=lambda: os.getenv("LEARNING_PLAN_MODE", "direct"))
+    # 直出计划是否用 LLM 生成内容（关闭则用 Skill Knowledge 规则骨架兜底）。
+    learning_plan_llm_enabled: bool = field(default_factory=lambda: os.getenv("LEARNING_PLAN_LLM_ENABLED", "true").lower() == "true")
     # ---------- 阶段 7 长期记忆与 Middleware ----------
     memory_enabled: bool = field(default_factory=lambda: os.getenv("MEMORY_ENABLED", "true").lower() == "true")
     memory_embed_enabled: bool = field(default_factory=lambda: os.getenv("MEMORY_EMBED_ENABLED", "true").lower() == "true")

@@ -119,9 +119,16 @@ def _llm_start(config: Config, req: TeachingRequest) -> dict | None:
             opening=data.get("opening") or "",
             content=_LLMContent(**data.get("content") or {}),
         )
+        # _LLMContent → 领域 TeachingContent（类型名不同但字段一致）
+        inner = parsed.content
+        content = TeachingContent(
+            concepts=list(inner.concepts),
+            examples=list(inner.examples),
+            exercises=list(inner.exercises),
+        )
         return {
             "opening": parsed.opening,
-            "content": parsed.content,
+            "content": content,
         }
     except Exception:  # noqa: BLE001
         logger.warning("TeachingAgent 首节生成失败，回退规则兜底", exc_info=True)
@@ -202,11 +209,12 @@ def _start_human(req: TeachingRequest) -> str:
         f"学习目标要点：{req.learning_objective}\n"
         f"验收标准：{req.acceptance_criteria}\n"
         f"执行步骤：\n{steps}\n\n"
+        # 花括号转义为 {{/}} 以规避 ChatPromptTemplate 将其解析为模板变量
         "只输出一段合法 JSON（不要 markdown 代码块），结构如下：\n"
-        '{"opening":"1~2 句口语开场并明确本次目标",'
-        '"content":{"concepts":[{"title":"概念名","explanation":"概念讲解"}],'
-        '"examples":[{"title":"示例名","explanation":"讲解","code":"可选，代码"}],'
-        '"exercises":[{"title":"练习名","instruction":"做什么","expected_result":"预期结果","hint":"可选提示"}]}}'
+        '{{"opening":"1~2 句口语开场并明确本次目标",'
+        '"content":{{"concepts":[{{"title":"概念名","explanation":"概念讲解"}}],'
+        '"examples":[{{"title":"示例名","explanation":"讲解","code":"可选，代码"}}],'
+        '"exercises":[{{"title":"练习名","instruction":"做什么","expected_result":"预期结果","hint":"可选提示"}}]}}}}'
     )
 
 
@@ -220,8 +228,8 @@ def _turn_human(session: TeachingSession, user_message: str) -> str:
         f"练习：{', '.join(e.title for e in session.content.exercises)}\n\n"
         f"最近对话记录：\n{history}\n\n"
         f"用户本轮消息：{user_message}\n\n"
-        "只输出一段合法 JSON：{\"message\":\"你的讲解/回答（按需引用上面的概念、示例、练习）\","
-        '"mode":"explain 或 question 或 exercise 或 verify"}。'
+        "只输出一段合法 JSON：{{\"message\":\"你的讲解/回答（按需引用上面的概念、示例、练习）\","
+        '"mode":"explain 或 question 或 exercise 或 verify"}}。'
     )
 
 

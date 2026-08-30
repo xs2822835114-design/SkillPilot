@@ -88,12 +88,17 @@ def teach_start(plan_id: str, task_id: str):
 
     from app.teaching import session_store, teaching_agent
 
+    # 既有会话按 user_id+task_id 稳定恢复：同一任务再次「开始学习」返回历史会话，而非新建空会话
+    existing = session_store.load_by_task(_config(), req.user_id, req.task_id)
+    if existing is not None:
+        return ok_response(existing.model_dump())
+
     try:
         session = teaching_agent.generate(_config(), req)
     except Exception:  # noqa: BLE001
         current_app.logger.exception("AI 教学生成失败")
         raise APIError(CODE_TEACHING, "AI 教学生成失败", 500)
-    session_store.put(session)
+    session_store.save(_config(), session)
     return ok_response(session.model_dump())
 
 
@@ -107,17 +112,25 @@ def teach_start_stream(plan_id: str, task_id: str):
 
     from app.teaching import session_store, teaching_agent
 
+    # 稳定恢复：同一任务已有学习会话则复用（含历史回合），否则新建后持久化
+    recovered = session_store.load_by_task(_config(), req.user_id, req.task_id)
+
     def generate():
+        session = recovered
+        is_new = session is None
         try:
-            session = teaching_agent.generate(_config(), req)
-            session_store.put(session)
+            if session is None:
+                session = teaching_agent.generate(_config(), req)
+                session_store.save(_config(), session)
             yield _sse("meta", {"task_id": task_id, "title": req.task_title})
         except Exception:  # noqa: BLE001
             current_app.logger.warning("AI 教学流式生成异常", exc_info=True)
             yield _sse("error", {"message": "AI 教学生成失败，请重试"})
             return
-        for i in range(0, len(session.opening), _CHUNK):
-            yield _sse("delta", {"text": session.opening[i : i + _CHUNK]})
+        if is_new:
+            for i in range(0, len(session.opening), _CHUNK):
+                yield _sse("delta", {"text": session.opening[i : i + _CHUNK]})
+        # done 携带完整会话（含 turns 历史），前端据此恢复 / 渲染
         yield _sse("done", session.model_dump())
 
     return Response(stream_with_context(generate()), content_type="text/event-stream")
@@ -127,7 +140,7 @@ def teach_start_stream(plan_id: str, task_id: str):
 def teach_message(session_id: str):
     from app.teaching import session_store, teaching_agent
 
-    session = session_store.get(session_id)
+    session = session_store.load(_config(), session_id)
     if session is None:
         raise APIError(CODE_TEACHING_NOT_FOUND, "教学会话不存在或已过期", 404)
 
@@ -140,13 +153,28 @@ def teach_message(session_id: str):
         raise APIError(CODE_VALIDATION, first_validation_error(exc), 422)
 
     session.append(TeachingTurn(role=ROLE_USER, message=req.message, mode="question"))
+    # 先把用户消息落库——即使后续 LLM 失败，也不丢失该条输入、且会话仍可继续
+    session_store.save(_config(), session)
     try:
         turn = teaching_agent.continue_turn(_config(), session, req.message)
     except Exception:  # noqa: BLE001
         current_app.logger.exception("AI 教学多轮应答失败")
-        raise APIError(CODE_TEACHING, "AI 教学多轮应答失败", 500)
+        raise APIError(CODE_TEACHING, "AI 教学多轮应答失败，你的问题已记录，可稍后重试", 500)
     session.append(turn)
+    # 每轮互动都落库，保证关闭窗口 / 重启后可恢复历史
+    session_store.save(_config(), session)
     return ok_response(turn.model_dump())
+
+
+@teaching_bp.get("/api/v1/teaching/<session_id>/history")
+def teach_history(session_id: str):
+    """加载既有学习会话完整快照（opening / content / turns / status），供前端恢复渲染。"""
+    from app.teaching import session_store
+
+    session = session_store.load(_config(), session_id)
+    if session is None:
+        raise APIError(CODE_TEACHING_NOT_FOUND, "教学会话不存在", 404)
+    return ok_response(session.model_dump())
 
 
 _CHUNK = 4  # 流式打字机字符数

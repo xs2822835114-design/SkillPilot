@@ -1,10 +1,12 @@
 <script setup>
 import { onMounted, ref, watch } from 'vue'
 import PlanTimeline from '@/components/PlanTimeline.vue'
+import TeachingPanel from '@/components/TeachingPanel.vue'
 import { usePlanStore } from '@/stores/plan'
 
 const plan = usePlanStore()
 const selected = ref('')
+const teachTask = ref(null) // 正在教学的任务（非空则打开教学面板）
 
 onMounted(async () => {
   await plan.loadPlanList()
@@ -26,13 +28,23 @@ async function generate() {
 function onToggle(task, checked) {
   plan.setTaskStatus(task, checked)
 }
+
+function onTeach(task) {
+  teachTask.value = task
+}
+
+function onTeachComplete(task) {
+  plan.setTaskStatus(task, true).then(() => {
+    teachTask.value = null
+  })
+}
 </script>
 
 <template>
   <div class="page">
     <header class="page-head">
       <h1>学习计划</h1>
-      <p>可执行 · 可验收 · 可聚焦的学习路线与进度跟踪</p>
+      <p>可执行 · 可验收 · 可聚焦的学习路线与进度跟踪（每个小目标可勾选完成，或点「开始学习」进入 AI 教学）</p>
       <div v-if="plan.planList.length" class="pick">
         <select v-model="selected" class="select">
           <option v-for="p in plan.planList" :key="p.plan_id" :value="p.plan_id">
@@ -50,6 +62,14 @@ function onToggle(task, checked) {
       :transitioning-task-id="plan.transitioningTaskId"
       @generate="generate"
       @toggle="onToggle"
+      @teach="onTeach"
+    />
+
+    <TeachingPanel
+      :plan="plan.currentPlan"
+      :task="teachTask"
+      @close="teachTask = null"
+      @complete="onTeachComplete"
     />
   </div>
 </template>

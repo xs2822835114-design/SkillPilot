@@ -424,6 +424,48 @@ def create_interview_tables(conn) -> None:
     print("interview_sessions / interview_answers 表已就绪")
 
 
+def create_teaching_tables(conn) -> None:
+    """阶段 5b：AI 教学会话与回合表（user_id + task_id 唯一定位学习会话，支持恢复，幂等）。"""
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS teaching_sessions (
+          session_id          VARCHAR(64) PRIMARY KEY,
+          user_id             VARCHAR(64) NOT NULL,
+          plan_id             VARCHAR(64) NOT NULL,
+          task_id             VARCHAR(64) NOT NULL,
+          title               TEXT,
+          learning_objective  TEXT,
+          acceptance_criteria TEXT,
+          opening             TEXT,
+          content_json        JSONB,
+          status              VARCHAR(24) NOT NULL DEFAULT 'active',
+          current_step        INT NOT NULL DEFAULT 0,
+          created_at          TIMESTAMPTZ DEFAULT now(),
+          updated_at          TIMESTAMPTZ DEFAULT now()
+        );
+        CREATE INDEX IF NOT EXISTS idx_teaching_sessions_user_task
+          ON teaching_sessions(user_id, task_id);
+        """
+    )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS teaching_turns (
+          id            SERIAL PRIMARY KEY,
+          session_id    VARCHAR(64) NOT NULL
+                        REFERENCES teaching_sessions(session_id) ON DELETE CASCADE,
+          role          VARCHAR(10) NOT NULL,
+          message       TEXT,
+          mode          VARCHAR(24),
+          content_json  JSONB,
+          created_at    TIMESTAMPTZ DEFAULT now()
+        );
+        CREATE INDEX IF NOT EXISTS idx_teaching_turns_session
+          ON teaching_turns(session_id);
+        """
+    )
+    print("teaching_sessions / teaching_turns 表已就绪")
+
+
 def run() -> None:
     cfg = get_config()
     if not cfg.database_url:
@@ -451,6 +493,7 @@ def run() -> None:
         create_eval_tables(conn)
         create_memory_tables(conn)
         create_interview_tables(conn)
+        create_teaching_tables(conn)
 
     print("数据库初始化完成")
 

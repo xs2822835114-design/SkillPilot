@@ -28,6 +28,13 @@ const gotoLabel = computed(() => GOTO_LABEL[goto.value?.page] || '查看详情')
 function goTo() {
   if (gotoPath.value) router.push(gotoPath.value)
 }
+
+// 阶段总预计小时数（用于卡片右上角概览）
+function phaseHours(phase) {
+  const tasks = phase?.tasks || []
+  const total = tasks.reduce((s, t) => s + Number(t.estimated_hours || 0), 0)
+  return Math.round(total)
+}
 </script>
 
 <template>
@@ -46,6 +53,42 @@ function goTo() {
       <p v-else class="text">
         {{ message.content || '…' }}<span v-if="message.status === 'streaming'" class="caret" />
       </p>
+
+      <!-- 计划正在生成：已预判定为计划意图但阶段尚未到达时，显示生动的生成中提示 -->
+      <div
+        v-if="
+          message.role === 'assistant' &&
+          message.status === 'streaming' &&
+          message.planBuilding &&
+          !(message.plan && message.plan.phases && message.plan.phases.length)
+        "
+        class="plan-building-card"
+      >
+        <span class="plan-spinner" />
+        正在为你生成分阶段学习计划…
+      </div>
+
+      <!-- 学习计划：以卡片形式展示，结构化事件增量生成时实时生长 -->
+      <div
+        v-if="message.plan && message.plan.phases && message.plan.phases.length"
+        class="plan-cards"
+      >
+        <div v-for="(phase, idx) in message.plan.phases" :key="phase.phase_id" class="plan-card">
+          <div class="plan-card-head">
+            <span class="plan-num">{{ idx + 1 }}</span>
+            <span class="plan-title">{{ phase.title || '阶段' }}</span>
+            <span class="plan-meta">{{ (phase.tasks || []).length }} 个任务 · {{ phaseHours(phase) }}h</span>
+          </div>
+          <div class="plan-card-body">
+            <div v-for="t in phase.tasks" :key="t.task_id" class="plan-task">
+              <span class="plan-check">☐</span>
+              <span class="plan-task-title">{{ t.title }}</span>
+              <em v-if="t.estimated_hours" class="plan-hours">{{ t.estimated_hours }}h</em>
+            </div>
+          </div>
+        </div>
+        <div v-if="message.status === 'streaming'" class="plan-building">正在生成…</div>
+      </div>
       <span v-if="message.status === 'ok' && message.interrupted" class="interrupted">· 已停止输出</span>
       <button
         v-if="gotoPath && message.role === 'assistant' && message.status === 'ok'"
@@ -166,6 +209,102 @@ function goTo() {
   font-size: 12px;
   color: var(--text-3);
 }
+/* 学习计划：卡片式可视化 */
+.plan-building-card {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 10px 12px;
+  font-size: 13px;
+  color: var(--text-2);
+  background: var(--bg-soft, #fafbfc);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-md);
+}
+.plan-spinner {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid var(--border);
+  border-top-color: var(--accent);
+  animation: spin 0.8s linear infinite;
+}
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+.plan-cards {
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.plan-card {
+  background: var(--bg-soft, #fff);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--radius-md);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+  overflow: hidden;
+}
+.plan-card-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px 8px;
+}
+.plan-num {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  display: grid;
+  place-items: center;
+  font-size: 12px;
+  font-weight: 700;
+  color: #fff;
+  background: var(--accent);
+}
+.plan-title {
+  flex: 1;
+  min-width: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+}
+.plan-meta {
+  flex: none;
+  font-style: normal;
+  font-size: 11px;
+  color: var(--text-3);
+  white-space: nowrap;
+}
+.plan-card-body {
+  display: flex;
+  flex-direction: column;
+  padding: 2px 12px 10px;
+}
+.plan-task {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 4px 0;
+  font-size: 13px;
+  color: var(--text-2);
+}
+.plan-check { color: var(--text-3); flex: none; }
+.plan-task-title { flex: 1; min-width: 0; }
+.plan-hours {
+  flex: none;
+  font-style: normal;
+  font-size: 11px;
+  color: var(--text-3);
+  background: var(--border);
+  border-radius: 999px;
+  padding: 1px 8px;
+}
+.plan-building { margin-top: 2px; font-size: 12px; color: var(--text-3); }
 .goto-btn {
   display: inline-block;
   margin-top: 10px;

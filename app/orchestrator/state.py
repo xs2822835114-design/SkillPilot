@@ -36,3 +36,4 @@ class SkillMapState(TypedDict, total=False):
     current_agent: str
     workflow_status: str
     error: dict | None
+    is_new_task: bool         # 本轮是否开启了全新的学习/求职目标（需要清理旧的当前任务状态）

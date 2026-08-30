@@ -166,10 +166,42 @@ export const useChatStore = defineStore('chat', {
                 bubbleRef.intent = evt.intent
               } else if (evt.type === 'delta') {
                 bubbleRef.content += evt.text || ''
+              } else if (evt.type === 'plan_building') {
+                // 计划正在生成（已预判定为计划意图），显示“生成中”状态避免看起来卡死
+                bubbleRef.planBuilding = true
+              } else if (evt.type === 'plan_phase') {
+                // 计划结构化事件增量累积：先出现阶段，后续 plan_task 挂进去
+                bubbleRef.plan = bubbleRef.plan || { phases: [] }
+                bubbleRef.plan.phases.push(evt.phase)
+              } else if (evt.type === 'plan_task') {
+                bubbleRef.plan = bubbleRef.plan || { phases: [] }
+                const phase = bubbleRef.plan.phases.find((p) => p.phase_id === evt.phase_id)
+                if (phase) {
+                  phase.tasks = phase.tasks || []
+                  phase.tasks.push(evt.task)
+                }
+              } else if (evt.type === 'plan_complete') {
+                bubbleRef.planBuilt = true
               } else if (evt.type === 'done') {
                 bubbleRef.status = 'ok'
                 bubbleRef.reason = bubbleRef.reason || ''
                 bubbleRef.artifacts = evt.artifacts || {}
+                // 兜底：若流式事件缺失/未走事件流，从 done.artifacts 补齐计划可视化
+                const lp = bubbleRef.artifacts?.learning_plan
+                if (lp && lp.phases && !bubbleRef.plan) {
+                  bubbleRef.plan = {
+                    phases: lp.phases.map((p) => ({
+                      phase_id: p.phase_id,
+                      title: p.title,
+                      tasks: (p.tasks || []).map((t) => ({
+                        task_id: t.task_id,
+                        title: t.title,
+                        estimated_hours: t.estimated_hours,
+                        status: t.status,
+                      })),
+                    })),
+                  }
+                }
               } else if (evt.type === 'error') {
                 // 后端已明确报错：把真实错误暴露为气泡错误态，避免误报「回复未完整返回」
                 bubbleRef.status = 'error'

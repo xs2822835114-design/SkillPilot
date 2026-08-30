@@ -20,12 +20,16 @@
 """
 from __future__ import annotations
 
+import json
+import logging
 from typing import Any, Callable
 
 from app.config import Config
 from app.domain import UserSkillProfile
 from app.domain.interview import InterviewQuestionType
 from app.agents.interview_strategy import build_strategy
+
+logger = logging.getLogger(__name__)
 
 # 访谈顺序：目标技能 > 前置 > 子能力 > 关联
 _SOURCE_PRIORITY = {"target": 0, "prerequisite": 1, "composite": 2, "related": 3}
@@ -185,11 +189,160 @@ def _question_text(qt: InterviewQuestionType, profile, subject: str) -> str:
     return text
 
 
+# ---------------- LLM 现场针对性出题（interview_llm_enabled=true 时启用） ----------------
+
+# band 满分档位的判据，供 LLM 生成「技术化 + 可判级」的选项时对齐行为证据。
+_BAND_GUIDANCE = (
+    "每个选项用第一人称写一段具体的技术性自述，让答案落在不同能力段位并让关键词可被提取：\n"
+    "  band=4 独立设计/从零搭建/主导过/调优过（精通）；\n"
+    "  band=3 在真实项目里实现过/落地过/接入了；\n"
+    "  band=2 写过示例/脚本练过手/跑通最小调用；\n"
+    "  band=1 看过/了解过资料和概念；\n"
+    "  band=0 完全没接触过。\n"
+    "选项必须紧扣该技能的真实概念/API/场景，而不是空泛的『我能做到』。"
+)
+
+
+def _parameterized_question(config: Config, profile, skill_id: str) -> tuple[list[str], list[str], str]:
+    """把技能画像浓缩成语料：核心概念 / 核心 API / 实践场景 + 父技能上下文。"""
+    concepts = list(getattr(profile, "core_concepts", None) or [])
+    apis = list(getattr(profile, "core_apis", None) or [])
+    practices = list(getattr(profile, "practice_context", None) or [])
+    parent = getattr(profile, "parent_skill_name", None) or ""
+    ctx = f"（该技能是 {parent} 下的机制/能力，需在 {parent} 上下文中考察）" if parent else ""
+    return concepts, apis, practices, ctx
+
+
+def _llm_available(config: Config) -> bool:
+    return bool(config.interview_llm_enabled and config.llm_enabled)
+
+
+def _parse_options(raw: list, name: str) -> list[dict]:
+    """把 LLM 返回的选项归一化成 {id, text, band}；去重、兜底空选项。"""
+    rows: list[dict] = []
+    seen: set[str] = set()
+    for o in raw or []:
+        if isinstance(o, dict):
+            text = str(o.get("text") or "").strip()
+        else:
+            text = str(o).strip()
+        if not text or text in seen:
+            continue
+        seen.add(text)
+        band = o.get("band") if isinstance(o, dict) else None
+        rows.append({"id": _LLM_OPTION_IDS[len(rows)], "text": text, "band": int(band) if isinstance(band, int) else 1})
+    # 始终兜底「完全没接触过」挡位，保证等级 0 可被选中
+    if not any(r["band"] == 0 for r in rows):
+        rows.append({"id": _LLM_OPTION_IDS[len(rows)], "text": f"完全没接触过 {name}", "band": 0})
+    if not rows:
+        rows = [{"id": "a", "text": f"我了解过 {name} 的基础概念", "band": 1},
+                {"id": "b", "text": f"完全没接触过 {name}", "band": 0}]
+    return rows
+
+
+_LLM_OPTION_IDS = "abcdefghij"
+
+
+def _build_question_with_llm(
+    config: Config, profile, skill_id: str, qt: InterviewQuestionType,
+    subject: str, index: int, total: int,
+) -> tuple[str, dict] | None:
+    """让 LLM 现场理解技能画像，生成针对性题干 + 技术化选项；不可用/失败返回 None（走规则兜底）。"""
+    if not _llm_available(config):
+        return None
+    try:
+        from langchain_core.prompts import ChatPromptTemplate
+        from langchain_openai import ChatOpenAI
+
+        name = profile.skill_name or profile.skill_id
+        type_label = {"concept": "概念理解", "api": "接口实操", "scenario": "场景落地",
+                      "experience": "实战经验", "implementation": "独立实现", "open": "开放追问"}.get(qt.value, qt.value)
+        concepts, apis, practices, ctx = _parameterized_question(config, profile, skill_id)
+        llm = ChatOpenAI(
+            model=config.llm_model,
+            base_url=config.llm_base_url,
+            api_key=config.llm_api_key,
+            temperature=0.5,
+        )
+        prompt = ChatPromptTemplate.from_messages(
+            [
+                (
+                    "system",
+                    "你是一名资深技术面试官，正在为学习者的技能画像生成一道【{type_label}】型选择题。"
+                    "要求：题干针对该技能的【核心概念 / 核心 API / 实践场景】提出，并结合父技能上下文，"
+                    "不要泛泛问『你接触过 X 吗』；选项是技术化、可区分能力段位的具体自述，而不是空洞的程度词。\n"
+                    "命中的能力点：{subject}。\n"
+                    "只输出合法 JSON（不要 markdown 代码块），形如：{schema}",
+                ),
+                (
+                    "human",
+                    "技能：{name}；类型：{skill_type}；父技能上下文：{ctx}\n"
+                    "核心概念：{concepts}\n核心 API：{apis}\n实践场景：{practices}\n\n"
+                    "题目类型：{qtype_desc}。{band_guidance}",
+                ),
+            ]
+        )
+        schema = json.dumps(
+            {"question": "针对性题干（自然口语，含该技能的具体词）",
+             "options": [{"text": "第一人称技术自述选项",
+                          "band": "0-4（4=独立设计/主导,3=项目实战,2=示例练手,1=看过资料,0=没接触）"}]}
+        )
+        content = (prompt | llm).invoke(
+            {
+                "type_label": type_label,
+                "subject": subject or (concepts[0] if concepts else name),
+                "name": name,
+                "skill_type": profile.skill_type,
+                "ctx": ctx,
+                "concepts": "、".join(concepts) or "（无）",
+                "apis": "、".join(apis) or "（无）",
+                "practices": "、".join(practices) or "（无）",
+                "qtype_desc": {
+                    InterviewQuestionType.OPEN: "开放追问，问法应引导用户补充分享，但选项仍按能力段位给",
+                    InterviewQuestionType.EXPERIENCE: "问真实项目里用该技能干过什么级别的活",
+                    InterviewQuestionType.IMPLEMENTATION: "问是否独立实现/搭建过相关功能与系统",
+                }.get(qt, "标准选择题"),
+                "band_guidance": _BAND_GUIDANCE,
+                "schema": schema,
+            }
+        )
+        text = (content.content if hasattr(content, "content") else str(content)).strip()
+        text = text.strip("` \n")
+        if text.startswith("json"):
+            text = text[4:].lstrip("` ")
+        data = json.loads(text)
+        question_text = str(data.get("question") or "").strip() or _question_text(qt, profile, subject)
+        options = _parse_options(data.get("options") or [], name)
+        prompt_text = f"（{index}/{total}）{question_text}"
+        question = {
+            "question_id": f"{skill_id}_q{qt.value}",
+            "skill_id": skill_id,
+            "skill_name": (profile.skill_name or skill_id),
+            "question_type": qt.value,
+            "capability": subject,
+            "prompt": prompt_text,
+            "question": question_text,
+            "options": options,
+            "allow_multiple": True,
+            "allow_free_text": True,
+            "index": index,
+            "total": total,
+            "generated_by": "llm",
+        }
+        return prompt_text, question
+    except Exception:  # noqa: BLE001
+        logger.warning("Interview LLM 现场出题失败，走规则兜底", exc_info=True)
+        return None
+
+
 def _build_question(
     config: Config, profile, skills_map: dict, skill_id: str, qt: InterviewQuestionType,
     subject: str, index: int, total: int,
 ) -> tuple[str, dict]:
-    """生成一条访谈题目：类型化题面 + 技术化选项 + 自由填写（供前端渲染）。"""
+    """生成一条访谈题目：优先 LLM 现场理解画像出针对性题，否则回退到规则化题面。"""
+    llm_res = _build_question_with_llm(config, profile, skill_id, qt, subject, index, total)
+    if llm_res is not None:
+        return llm_res
     name = (skills_map.get(skill_id) or {}).get("skill_name") or profile.skill_name or skill_id
     qtext = _question_text(qt, profile, subject)
     prompt = f"（{index}/{total}）{qtext}"
@@ -206,6 +359,7 @@ def _build_question(
         "allow_free_text": True,
         "index": index,
         "total": total,
+        "generated_by": "rule",
     }
     return prompt, question
 

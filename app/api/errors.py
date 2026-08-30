@@ -38,6 +38,9 @@ CODE_DEMO_STREAM = 50081
 # --- 阶段 10 AI 问答式能力评估 ---
 CODE_INTERVIEW = 50090
 CODE_INTERVIEW_NOT_FOUND = 40490
+# --- AI 技术教学（阶段 5 三级结构 / TeachingAgent） ---
+CODE_TEACHING = 50100
+CODE_TEACHING_NOT_FOUND = 40491
 
 
 class APIError(Exception):

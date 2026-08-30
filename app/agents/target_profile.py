@@ -93,5 +93,5 @@ def summarize(target: TargetProfile) -> str:
     core = ", ".join(f"{s.skill_name}({s.required_level})" for s in target.skills)
     return (
         f"已为你建立目标技能画像「{target.goal_name}」：{core}。"
-        "接下来我会通过几个问题了解你当前的技术栈，再计算差距并给出路径。"
+        "接下来我会为你生成一份可执行的学习计划。"
     )

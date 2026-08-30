@@ -3,8 +3,9 @@ defineProps({
   plan: { type: Object, default: null },
   loading: { type: Boolean, default: false },
   transitioningTaskId: { type: String, default: null },
+  teachingTaskId: { type: String, default: null },
 })
-defineEmits(['generate', 'toggle'])
+defineEmits(['generate', 'toggle', 'teach'])
 
 const execSteps = (task) => (task && task.execution_steps) || []
 const stepNo = (task, s) => task.execution_steps?.indexOf(s) + 1 || ''
@@ -34,17 +35,26 @@ const stepNo = (task, s) => task.execution_steps?.indexOf(s) + 1 || ''
           <span class="phase-title">{{ phase.title || `阶段 ${idx + 1}` }}</span>
         </div>
         <div v-for="task in phase.tasks" :key="task.task_id" class="task">
-          <label class="row">
-            <input
-              type="checkbox"
-              class="check"
-              :checked="task.status === 'done'"
-              :disabled="transitioningTaskId === task.task_id"
-              @change="$emit('toggle', task, $event.target.checked)"
-            />
-            <span class="title" :class="{ done: task.status === 'done' }">{{ task.title }}</span>
-            <span v-if="task.estimated_hours" class="hours">约 {{ task.estimated_hours }}h</span>
-          </label>
+          <div class="row">
+            <label class="row-main">
+              <input
+                type="checkbox"
+                class="check"
+                :checked="task.status === 'done'"
+                :disabled="transitioningTaskId === task.task_id"
+                @change="$emit('toggle', task, $event.target.checked)"
+              />
+              <span class="title" :class="{ done: task.status === 'done' }">{{ task.title }}</span>
+              <span v-if="task.estimated_hours" class="hours">约 {{ task.estimated_hours }}h</span>
+            </label>
+            <button
+              class="teach-btn"
+              :disabled="task.status === 'done' || teachingTaskId === task.task_id"
+              @click="$emit('teach', task)"
+            >
+              {{ task.status === 'done' ? '已完成' : '开始学习' }}
+            </button>
+          </div>
           <p v-if="task.acceptance_criteria" class="acc">{{ task.acceptance_criteria }}</p>
 
           <!-- 执行级步骤（TaskRefinementAgent 产物）；回退到粗粒度 steps -->
@@ -125,9 +135,29 @@ const stepNo = (task, s) => task.execution_steps?.indexOf(s) + 1 || ''
 .row {
   display: flex;
   align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.row-main {
+  display: flex;
+  align-items: center;
   gap: 10px;
   cursor: pointer;
+  flex: 1;
+  min-width: 0;
 }
+.teach-btn {
+  flex: none;
+  font-size: 12px;
+  padding: 4px 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
+  cursor: pointer;
+}
+.teach-btn:hover { opacity: 0.85; }
+.teach-btn:disabled { opacity: 0.5; cursor: default; }
 .check {
   width: 17px;
   height: 17px;

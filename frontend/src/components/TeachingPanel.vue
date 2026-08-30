@@ -20,6 +20,18 @@ let aborter = null
 
 const planId = () => props.plan?.plan_id
 
+// 后端 turn {role,message,mode} → 前端 {role,content}
+function toTurn(t) {
+  return { role: t.role, content: t.message }
+}
+
+function applySession(sess) {
+  session.value = sess
+  opening.value = sess.opening || ''
+  // 恢复历史回合（用户关闭窗口后再进入同一任务时由后端回传）
+  turns.value = (sess.turns || []).map(toTurn)
+}
+
 function start() {
   if (!props.task || !props.plan) return
   session.value = null
@@ -34,8 +46,7 @@ function start() {
     onEvent: (evt) => {
       if (evt.type === 'delta') opening.value += evt.text
       else if (evt.type === 'done') {
-        opening.value = evt.opening
-        session.value = evt
+        applySession(evt)
         streaming.value = false
       } else if (evt.type === 'error') {
         error.value = evt.message || 'AI 教学生成失败'

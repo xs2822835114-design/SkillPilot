@@ -10,7 +10,13 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any
 
+from app.contracts import VALID_INTENTS
+
 DEFAULT_FALLBACK = "我收到你的消息了，但暂时没能完成处理，请稍后再试。"
+
+# 业务意图（tech_learning / job_search / plan_generation）：其产物才会作为 artifacts 透传给前端；
+# 普通 chat 轮不携带旧计划/旧画像，避免「换了话题还是看到旧计划」。
+_BUSINESS_INTENTS = {i for i in VALID_INTENTS if i != "chat"}
 
 
 def _now_iso() -> str:
@@ -57,12 +63,19 @@ def reply_node(state: dict) -> dict[str, Any]:
     if intent == "chat" or status == "pending":
         status = "done"
 
+    # artifacts 只透传本轮业务意图的产物；chat 等非业务轮不携带旧计划/旧画像，
+    # 避免「换了话题/闲聊」时旧 learning_plan 被前端再次渲染。
+    if intent in _BUSINESS_INTENTS:
+        artifacts = state.get("artifacts") or {}
+    else:
+        artifacts = {}
+
     return {
         "messages": history + [user_msg, assistant_msg],
         "steps": steps,
         "intent": intent,
         "current_agent": agent or "reply",
         "workflow_status": status,
-        "artifacts": state.get("artifacts") or {},
+        "artifacts": artifacts,
         "error": None,
     }

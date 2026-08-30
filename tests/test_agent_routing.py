@@ -54,8 +54,38 @@ def test_a6c_tech_learning_without_skill_asks(client):
 
 
 def test_a2b_tech_learning_by_skill(client):
-    """TC-A2b：说「我想学 Flask」→ 技术学习意图，建立 Flask 目标画像后进入访谈（首轮追问）。"""
+    """TC-A2b（直出默认）：说「我想学 Flask」→ 技术学习意图 → 默认 direct 直出结构化学习计划。"""
     resp = _chat(client, "A_T2B", "我想学 Flask")
+    assert resp.status_code == 200
+    data = resp.get_json()["data"]
+    assert data["route"] == "tech_learning"
+    assert data["workflow_status"] == "done"
+    assert "learning_plan_agent" in data["steps"]
+    art = data["artifacts"]
+    assert art["intent"] == "tech_learning"
+    assert art.get("learning_plan"), "直出模式应携带结构化 learning_plan"
+    assert art["learning_plan"].get("phases")
+    assert art["target_profile"]["goal_name"] == "Flask"
+    skill_ids = {s["skill_id"] for s in art["target_profile"]["skills"]}
+    assert "flask" in skill_ids
+
+
+def test_a2c_tech_learning_interview_option():
+    """TC-A2c（精准模式保留）：learning_plan_mode='interview' 时「我想学 Flask」→ 进入技能访谈首轮追问。"""
+    from app import create_app
+    from app.config import Config
+
+    cfg = Config(
+        env="test",
+        database_url="",
+        llm_api_key="",
+        checkpointer_backend="memory",
+        learning_plan_mode="interview",
+    )
+    flask_app = create_app(cfg)
+    flask_app.config["TESTING"] = True
+    interview_client = flask_app.test_client()
+    resp = _chat(interview_client, "A_T2C", "我想学 Flask")
     assert resp.status_code == 200
     data = resp.get_json()["data"]
     assert data["route"] == "tech_learning"
@@ -65,8 +95,6 @@ def test_a2b_tech_learning_by_skill(client):
     art = data["artifacts"]
     assert art["intent"] == "tech_learning"
     assert art["target_profile"]["goal_name"] == "Flask"
-    skill_ids = {s["skill_id"] for s in art["target_profile"]["skills"]}
-    assert "flask" in skill_ids
 
 
 def test_a7_plan_degraded_without_db(client):

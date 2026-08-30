@@ -112,6 +112,9 @@ class TeachingSession(BaseModel):
     opening: str = ""
     content: TeachingContent = Field(default_factory=TeachingContent)
 
+    status: str = "active"        # new | active | paused | completed（生命周期；关闭≠结束）
+    current_step: int = 0         # 当前教学步骤索引（供恢复时继续）
+
     turns: list[TeachingTurn] = Field(default_factory=list)
 
     def append(self, turn: TeachingTurn) -> None:
