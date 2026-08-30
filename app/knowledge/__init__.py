@@ -5,7 +5,7 @@
 - role_repository：岗位能力定义（role_competencies）
 - resource_repository：学习资源（knowledge_sources）
 """
-from app.knowledge.skill_repository import list_skills, relations, prerequisites, resolve_skill
+from app.knowledge.skill_repository import list_skills, relations, prerequisites, parent_skills, resolve_skill
 from app.knowledge.role_repository import find_role, get_role, list_roles
 from app.knowledge.resource_repository import resources_for
 
@@ -13,6 +13,7 @@ __all__ = [
     "list_skills",
     "relations",
     "prerequisites",
+    "parent_skills",
     "resolve_skill",
     "list_roles",
     "get_role",

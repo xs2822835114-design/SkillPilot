@@ -272,6 +272,13 @@ def _persist_chat_plan(config, user_id: str, target, plan_items: list) -> str | 
             phases=[LearningPhase(phase_id="P1", title="学习路线", order=1, tasks=tasks, skill_ids=[t.skill_id for t in tasks])],
             metrics={"total_tasks": len(tasks), "done_tasks": 0, "total_hours": 4.0 * len(tasks), "weeks_est": None},
         )
+        # 精炼为执行级步骤（同 Planner 一致的 TaskRefinementAgent；best-effort）
+        try:
+            from app.agents.task_refinement import refine_learning_plan
+
+            refine_learning_plan(config, plan)
+        except Exception:  # noqa: BLE001
+            pass
         todo_store.create_plan(
             config, plan,
             report={"target": target.goal_name, "skill_ids": [t.skill_id for t in tasks]},

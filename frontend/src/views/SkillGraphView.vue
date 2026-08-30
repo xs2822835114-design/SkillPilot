@@ -90,21 +90,36 @@ const planNotFound = computed(() => !plan.planLoading && !planNodes.value.length
 
     <section v-if="plan.currentPlan && plan.currentPlan.phases" class="detail">
       <h2>学习环节明细</h2>
-      <p class="detail-hint">每个技能到可执行环节：建立概念 → 环境准备 → 核心用法 → 组合实践 → 进阶 → 验收复盘。</p>
-      <div v-for="(phase, pi) in plan.currentPlan.phases" :key="phase.phase_id || pi" class="detail-phase">
-        <h3 class="detail-phase-title">{{ phase.title || `阶段 ${pi + 1}` }}</h3>
-        <div v-for="task in phase.tasks" :key="task.task_id" class="detail-task">
-          <div class="detail-task-head">
-            <span class="detail-skill">{{ task.title }}</span>
-            <span class="detail-status" :class="{ done: task.status === 'done' }">
-              {{ task.status === 'done' ? '已掌握' : '待学习' }}
-            </span>
+      <p class="detail-hint">每个技能到可执行环节：做什么 / 产出什么 / 怎么验证，照着就能开工。</p>
+          <div v-for="(phase, pi) in plan.currentPlan.phases" :key="phase.phase_id || pi" class="detail-phase">
+            <h3 class="detail-phase-title">{{ phase.title || `阶段 ${pi + 1}` }}</h3>
+            <div v-for="task in phase.tasks" :key="task.task_id" class="detail-task">
+              <div class="detail-task-head">
+                <span class="detail-skill">{{ task.title }}</span>
+                <span class="detail-status" :class="{ done: task.status === 'done' }">
+                  {{ task.status === 'done' ? '已掌握' : '待学习' }}
+                </span>
+              </div>
+              <!-- 执行级步骤（优先）；回退到粗粒度 steps -->
+              <div v-if="(task.execution_steps || []).length" class="dex">
+                <div v-for="es in task.execution_steps" :key="es.step_id" class="dex-step">
+                  <div class="dex-head">
+                    <span class="dex-idx">{{ es.step_id }}</span>
+                    <span class="dex-title">{{ es.title }}<em class="dex-min" v-if="es.estimated_minutes">约 {{ es.estimated_minutes }} 分钟</em></span>
+                  </div>
+                  <p v-if="es.action" class="dex-line"><b>做什么：</b>{{ es.action }}</p>
+                  <ul v-if="es.instructions && es.instructions.length" class="dex-ins">
+                    <li v-for="(ins, k) in es.instructions" :key="k">{{ ins }}</li>
+                  </ul>
+                  <p v-if="es.deliverable" class="dex-line"><b>产出：</b>{{ es.deliverable }}</p>
+                  <p v-if="es.verification" class="dex-line v"><b>验证：</b>{{ es.verification }}</p>
+                </div>
+              </div>
+              <ol v-else-if="task.steps && task.steps.length" class="detail-steps">
+                <li v-for="(s, si) in task.steps" :key="si">{{ s }}</li>
+              </ol>
+            </div>
           </div>
-          <ol v-if="task.steps && task.steps.length" class="detail-steps">
-            <li v-for="(s, si) in task.steps" :key="si">{{ s }}</li>
-          </ol>
-        </div>
-      </div>
     </section>
   </div>
 </template>
@@ -221,6 +236,63 @@ const planNotFound = computed(() => !plan.planLoading && !planNodes.value.length
   font-weight: 600;
   text-align: center;
   line-height: 15px;
+}
+/* 执行级步骤 */
+.dex {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.dex-step {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+  background: var(--bg-soft, #fafbfc);
+}
+.dex-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.dex-idx {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 10px;
+  font-weight: 600;
+  display: grid;
+  place-items: center;
+}
+.dex-title {
+  font-size: 13px;
+  font-weight: 600;
+}
+.dex-min {
+  font-style: normal;
+  font-size: 11px;
+  color: var(--text-3);
+  font-weight: 400;
+  margin-left: 6px;
+}
+.dex-line {
+  margin: 5px 0 0;
+  font-size: 12.5px;
+  color: var(--text-2);
+  line-height: 1.5;
+}
+.dex-line.v {
+  color: var(--accent);
+}
+.dex-ins {
+  margin: 4px 0 0;
+  padding-left: 16px;
+  font-size: 12.5px;
+  color: var(--text-2);
+  line-height: 1.5;
 }
 .err {
   padding: 10px 14px;

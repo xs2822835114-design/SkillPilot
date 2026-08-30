@@ -5,6 +5,9 @@ defineProps({
   transitioningTaskId: { type: String, default: null },
 })
 defineEmits(['generate', 'toggle'])
+
+const execSteps = (task) => (task && task.execution_steps) || []
+const stepNo = (task, s) => task.execution_steps?.indexOf(s) + 1 || ''
 </script>
 
 <template>
@@ -43,7 +46,26 @@ defineEmits(['generate', 'toggle'])
             <span v-if="task.estimated_hours" class="hours">约 {{ task.estimated_hours }}h</span>
           </label>
           <p v-if="task.acceptance_criteria" class="acc">{{ task.acceptance_criteria }}</p>
-          <ol v-if="task.steps && task.steps.length" class="steps">
+
+          <!-- 执行级步骤（TaskRefinementAgent 产物）；回退到粗粒度 steps -->
+          <div v-if="execSteps(task).length" class="esteps">
+            <div v-for="s in execSteps(task)" :key="s.step_id" class="estep">
+              <div class="estep-head">
+                <span class="estep-idx">{{ s.step_id || stepNo(task, s) }}</span>
+                <span class="estep-title">
+                  {{ s.title }}
+                  <em v-if="s.estimated_minutes" class="estep-min">约 {{ s.estimated_minutes }} 分钟</em>
+                </span>
+              </div>
+              <p v-if="s.action" class="estep-line"><b>做什么：</b>{{ s.action }}</p>
+              <ul v-if="s.instructions && s.instructions.length" class="estep-ins">
+                <li v-for="(ins, k) in s.instructions" :key="k">{{ ins }}</li>
+              </ul>
+              <p v-if="s.deliverable" class="estep-meta"><b>产出：</b>{{ s.deliverable }}</p>
+              <p v-if="s.verification" class="estep-meta acc-color"><b>验证：</b>{{ s.verification }}</p>
+            </div>
+          </div>
+          <ol v-else-if="task.steps && task.steps.length" class="steps">
             <li v-for="(s, i) in task.steps" :key="i">
               <span class="step-dot">{{ i + 1 }}</span>
               <span class="step-text">{{ s }}</span>
@@ -165,6 +187,71 @@ defineEmits(['generate', 'toggle'])
 .step-text {
   flex: 1;
   min-width: 0;
+}
+/* 执行级步骤 */
+.esteps {
+  margin: 8px 0 0 27px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.estep {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-soft, #fafbfc);
+  padding: 8px 10px;
+}
+.estep-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.estep-idx {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 10.5px;
+  font-weight: 600;
+  display: grid;
+  place-items: center;
+}
+.estep-title {
+  flex: 1;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+.estep-min {
+  font-style: normal;
+  font-size: 11px;
+  color: var(--text-3);
+  margin-left: 6px;
+  font-weight: 400;
+}
+.estep-line {
+  margin: 6px 0 0;
+  font-size: 12.5px;
+  color: var(--text-2);
+  line-height: 1.5;
+}
+.estep-ins {
+  margin: 4px 0 0;
+  padding-left: 16px;
+  font-size: 12.5px;
+  color: var(--text-2);
+  line-height: 1.5;
+}
+.estep-meta {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: var(--text-2);
+  line-height: 1.5;
+}
+.acc-color {
+  color: var(--accent);
 }
 .primary {
   font-size: 13px;

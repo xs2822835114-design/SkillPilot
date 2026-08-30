@@ -40,6 +40,7 @@ def generate(config: Config, request: PlanRequest) -> LearningPlan:
         learning_style=request.learning_style,
         done_skills=frozenset(),
     )
+    _refine(config, plan)
     todo_store.create_plan(
         config, plan,
         report=report.model_dump(mode="json"),
@@ -80,12 +81,23 @@ def replan(config: Config, plan_id: str, request: ReplanRequest) -> LearningPlan
         done_skills=frozenset(done_skills),
     )
     plan.created_at = existing.created_at
+    _refine(config, plan)
     todo_store.create_plan(
         config, plan,
         report=report.model_dump(mode="json"),
         skill_ids=list(report.recommended_sequence),
     )
     return plan
+
+
+def _refine(config: Config, plan: LearningPlan) -> None:
+    """在 Planner 后精炼每条任务为执行级步骤（TaskRefinementAgent）。"""
+    try:
+        from app.agents.task_refinement import refine_learning_plan
+
+        refine_learning_plan(config, plan)
+    except Exception:  # noqa: BLE001 - 精炼为增强型能力，失败不阻断计划生成
+        logger.warning("学习计划执行级精炼未完成，沿用粗粒度步骤", exc_info=True)
 
 
 def _compute_report(config: Config, request: PlanRequest) -> SkillGapReport:
@@ -140,7 +152,7 @@ def _build_plan(
                     ),
                     status=TASK_DONE if done else "pending",
                     acceptance_criteria=explain.build_acceptance(name, delta),
-                    steps=explain.build_steps(name, delta),
+                    steps=explain.build_steps(config, name, skill, delta),
                     resources=explain.resources_for_skill(config, skill, name),
                     required=not done,
                     order=order,

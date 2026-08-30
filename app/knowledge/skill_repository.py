@@ -71,6 +71,16 @@ def prerequisites(config: Config, skill_id: str) -> list[str]:
     return list(dict.fromkeys(relations(config, skill_id)["requires"]))
 
 
+def parent_skills(config: Config, skill_id: str) -> list[str]:
+    """返回把该技能作为子能力的「父技能」id 列表（composite_of：父→子）。
+
+    例如 checkpoint / state_management / node_graph_编排 的父技能是 langgraph。
+    """
+    graph = _load_graph(config)
+    parents = [source for source, target, rel in graph["edges"] if rel == "composite_of" and target == skill_id]
+    return list(dict.fromkeys(parents))
+
+
 def resolve_skill(config: Config, name: str) -> dict | None:
     """按技能名（或 id、别名）解析技能节点；未命中返回 None。"""
     key = _json_source.slug(name)

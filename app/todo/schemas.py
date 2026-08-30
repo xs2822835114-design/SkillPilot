@@ -10,6 +10,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field, field_validator
 
+from app.domain.execution import ExecutionStep
 from app.gap.schemas import SkillGapReport, TargetSkill
 
 # 任务状态机：pending → doing → done（V1 仅允许前向流转）
@@ -110,6 +111,9 @@ class LearningTask(BaseModel):
     status: str = TASK_PENDING
     acceptance_criteria: str = ""
     steps: list[str] = Field(default_factory=list)
+    # 执行级步骤（TaskRefinementAgent 产物）；空列表则前端回退展示 steps
+    execution_steps: list[ExecutionStep] = Field(default_factory=list)
+    is_refined: bool = False
     resources: list[LearningResource] = Field(default_factory=list)
     required: bool = False
     order: int = 0

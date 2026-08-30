@@ -249,6 +249,8 @@ def create_todo_tables(conn) -> None:
           acceptance_criteria TEXT,
           resources_json     JSONB,
           steps_json         JSONB,
+          execution_steps_json JSONB,
+          is_refined         BOOLEAN NOT NULL DEFAULT false,
           required           BOOLEAN NOT NULL DEFAULT false,
           started_at         TIMESTAMPTZ,
           finished_at        TIMESTAMPTZ,
@@ -261,6 +263,8 @@ def create_todo_tables(conn) -> None:
     )
     # 既有库补齐步骤明细列（幂等；新库已在建表语句内创建）
     conn.execute("ALTER TABLE learning_tasks ADD COLUMN IF NOT EXISTS steps_json JSONB")
+    conn.execute("ALTER TABLE learning_tasks ADD COLUMN IF NOT EXISTS execution_steps_json JSONB")
+    conn.execute("ALTER TABLE learning_tasks ADD COLUMN IF NOT EXISTS is_refined BOOLEAN DEFAULT false")
     print("learning_plans / learning_tasks 表已就绪")
 
 

@@ -21,24 +21,17 @@ def build_acceptance(name: str, delta: int) -> str:
     return f"理解并掌握 {name} 的核心概念，能独立完成一个可运行的示例并讲清使用场景。"
 
 
-def build_steps(name: str, delta: int) -> list[str]:
-    """把一个技能任务拆成「每个环节做什么」的逐步清单。
+def build_steps(config, name: str, skill_id: str | None = None, delta: int = 1) -> list[str]:
+    """把一个技能任务拆成「每个环节做什么」的逐步清单（骨架级别）。
 
-    环节随等级差（delta）逐级加深：delta 越大越深入（项目实战/系统设计），
-    保证同一技能在不同缺口下给出不同粒度的动作，而不是千篇一律的模板。
+    已从「固定模板生成器」改为「兜底生成器」：先由 Skill Classification 判定该技能
+    属于哪类学习对象（framework / mechanism / api / ...），再按对应学习模式给出骨架，
+    避免 Checkpoint、LLM API、RAG 全部套同一套「概念→环境→API→项目→验收」模板。
+    真正执行级细节由 ExecutionPlanRefiner（execution_steps）负责。
     """
-    d = max(1, int(delta or 1))
-    steps = [
-        f"建立概念：通读 {name} 官方 Overview 与 Getting Started，弄清它解决什么问题、与相邻技术的边界",
-        f"环境准备：搭好 {name} 的本地开发/运行环境，跑通官方最小示例并理解每一步",
-        f"核心用法：系统练习 {name} 的核心 API 与典型用法，写 3～5 个可独立运行的小练习",
-    ]
-    if d >= 2:
-        steps.append(f"组合实践：把 {name} 与相关技术串联，落地一个贴近真实场景的小项目")
-    if d >= 3:
-        steps.append(f"进阶挑战：深入 {name} 原理/源码或高阶特性，独立设计并实现一个完整可用的系统")
-    steps.append(f"验收复盘：对照验收标准自查，产出一篇学习笔记或可复现工程，沉淀为可复用经验")
-    return steps
+    from app.agents.task_refinement import build_steps_fallback
+
+    return build_steps_fallback(config, name, skill_id or name, delta)
 
 
 def build_goal(role_name: str) -> str:

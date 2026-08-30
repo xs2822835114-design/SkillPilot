@@ -85,8 +85,9 @@ def _insert_task(conn, plan_id: str, phase: LearningPhase, task: LearningTask) -
         INSERT INTO learning_tasks
           (id, plan_id, phase_id, phase_order, task_order, skill_id, title,
            estimated_hours, status, acceptance_criteria, resources_json, steps_json,
+           execution_steps_json, is_refined,
            required, started_at, finished_at, created_at, updated_at)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, now(), now())
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, now(), now())
         """,
         (
             task.task_id,
@@ -101,6 +102,8 @@ def _insert_task(conn, plan_id: str, phase: LearningPhase, task: LearningTask) -
             task.acceptance_criteria,
             Jsonb([r.model_dump() for r in task.resources]),
             Jsonb(task.steps),
+            Jsonb([s.model_dump() for s in task.execution_steps]),
+            bool(task.is_refined),
             task.required,
             started_at,
             finished_at,
@@ -113,8 +116,10 @@ def _now() -> datetime:
 
 
 def _ensure_steps_column(conn) -> None:
-    """幂等补齐 learning_tasks.steps_json 列（历史库升级；新建库由 init_db 建表时已含）。"""
+    """幂等补齐执行级步骤列（历史库升级；新建库由 init_db 建表时已含）。"""
     conn.execute("ALTER TABLE learning_tasks ADD COLUMN IF NOT EXISTS steps_json JSONB")
+    conn.execute("ALTER TABLE learning_tasks ADD COLUMN IF NOT EXISTS execution_steps_json JSONB")
+    conn.execute("ALTER TABLE learning_tasks ADD COLUMN IF NOT EXISTS is_refined BOOLEAN DEFAULT false")
 
 
 def load_plan(config: Config, plan_id: str) -> LearningPlan | None:
@@ -135,6 +140,8 @@ def load_plan(config: Config, plan_id: str) -> LearningPlan | None:
             (plan_id,),
         ).fetchall()
 
+    from app.domain.execution import ExecutionStep
+
     phases: dict[int, LearningPhase] = {}
     all_tasks: list[LearningTask] = []
     for r in rows:
@@ -146,6 +153,8 @@ def load_plan(config: Config, plan_id: str) -> LearningPlan | None:
             status=r["status"],
             acceptance_criteria=r["acceptance_criteria"] or "",
             steps=list(r["steps_json"] or []),
+            execution_steps=[ExecutionStep(**x) for x in (r["execution_steps_json"] or [])],
+            is_refined=bool(r["is_refined"]),
             resources=[LearningResource(**x) for x in (r["resources_json"] or [])],
             required=bool(r["required"]),
             order=int(r["task_order"]),

@@ -53,7 +53,7 @@ def build_learning_plan(config: Config, gaps: list, path: list[str]) -> list[dic
                     else f"L0→L{g.target_level}"
                 ),
                 "priority": g.priority,
-                "steps": build_steps(g.skill_name, g.gap),
+                "steps": build_steps(config, g.skill_name, sid, g.gap),
                 "resources": [
                     {
                         "title": r.get("title", "") or "",
