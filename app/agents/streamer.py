@@ -50,8 +50,7 @@ def stream_reply(
     )
     hint = plan_intent or intent_hint
     direct = (
-        getattr(config, "learning_plan_mode", "direct") == "direct"
-        and bool(plan_intent)
+        bool(plan_intent)
         and getattr(config, "llm_enabled", False)
         and getattr(config, "learning_plan_llm_enabled", True)
     )
@@ -272,8 +271,6 @@ _NODE_LABELS = {
     "plan_node": "学习目标解析",
     "tech_requirement_node": "技术目标解析",
     "job_requirement_node": "岗位目标解析",
-    "interview_node": "技能访谈",
-    "gap_node": "缺口与路径匹配",
     "learning_plan_node": "学习计划生成",
     "reply_node": "回复组装",
 }

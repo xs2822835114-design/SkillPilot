@@ -1,5 +1,7 @@
-"""Agent 架构新增能力单测（阶段 3~8，覆盖意图路由 + 目标画像 + 后续闭环）。
+"""Agent 架构单测（阶段 3~4：意图路由 + 目标画像）。
 
+访谈、缺口分析下线后，原「目标画像→访谈→缺口」闭环用例已随相关模块移除，
+此处仅保留仍被学习计划生成复用：意图路由与确定性目标画像展开。
 约定：均基于内存 checkpointer（无 DB / 无 LLM），保证确定性、可在 CI 始终运行。
 """
 from __future__ import annotations
@@ -12,23 +14,6 @@ from app.config import Config
 @pytest.fixture()
 def cfg():
     return Config(env="test", database_url="", llm_api_key="", checkpointer_backend="memory")
-
-
-@pytest.fixture()
-def interview_client():
-    """访谈精准模式（learning_plan_mode='interview'）的 test_client，用于目标画像→访谈→缺口闭环。"""
-    from app import create_app
-
-    app_cfg = Config(
-        env="test",
-        database_url="",
-        llm_api_key="",
-        checkpointer_backend="memory",
-        learning_plan_mode="interview",
-    )
-    flask_app = create_app(app_cfg)
-    flask_app.config["TESTING"] = True
-    return flask_app.test_client()
 
 
 def _chat(client, thread_id: str, message: str, **overrides):
@@ -65,48 +50,7 @@ def test_route_chat_unchanged(client):
     assert resp.get_json()["data"]["route"] == "chat"
 
 
-# ---------------- 阶段 4：目标画像（tech / job → TargetProfile） ----------------
-#
-# 说明：目标画像构建成功后，编排会继续进入「技能访谈」（阶段 5），因此首轮以
-# need_input（访谈追问）收尾，target_profile 仍随 artifacts 透出供前端展示。
-
-
-def test_job_search_builds_target_profile(interview_client):
-    resp = _chat(interview_client, "N_J2", "我想找 AI Agent 工程师岗位")
-    data = resp.get_json()["data"]
-    assert data["route"] == "job_search"
-    # 目标画像已建立 → 进入技能访谈（首轮追问）
-    assert data["workflow_status"] == "need_input"
-    assert "skill_interview_agent" in data["steps"]
-    art = data["artifacts"]
-    assert art["intent"] == "job_search"
-    profile = art["target_profile"]
-    assert profile["goal_type"] == "job_search"
-    assert profile["goal_name"] == "AI Agent 工程师"
-    ids = {s["skill_id"] for s in profile["skills"]}
-    assert "langgraph" in ids
-    assert "python" in ids
-    assert "llm_api" in ids
-
-
-def test_tech_learning_builds_target_profile(interview_client):
-    resp = _chat(interview_client, "N_T2", "我想学 LangGraph")
-    data = resp.get_json()["data"]
-    assert data["route"] == "tech_learning"
-    # 目标画像已建立 → 进入技能访谈（首轮追问）
-    assert data["workflow_status"] == "need_input"
-    assert "skill_interview_agent" in data["steps"]
-    profile = data["artifacts"]["target_profile"]
-    assert profile["goal_type"] == "tech_learning"
-    assert profile["goal_name"] == "LangGraph"
-    ids = {s["skill_id"] for s in profile["skills"]}
-    assert "langgraph" in ids       # 目标技能
-    assert "python" in ids          # 前置
-    assert "llm_api" in ids         # 前置
-    assert "langchain" in ids       # 前置
-
-
-# ---------------- 阶段 4（单元）：确定性展开 ----------------
+# ---------------- 阶段 4（单元）：确定性目标画像展开 ----------------
 
 
 def test_build_tech_target_direct(cfg):
@@ -148,93 +92,3 @@ def test_build_job_target_direct(cfg):
     levels = {s.skill_id: s.required_level for s in target.skills}
     assert levels["langgraph"] == 4
     assert build_job_target(cfg, "NOPE") is None
-
-
-# ---------------- 阶段 5/6：访谈 → 缺口 完整闭环 ----------------
-
-
-def test_interview_strategy_differs_by_skill_type(cfg):
-    """不同技能类型生成不同题型序列与题面（不再是同一套 0~5 模板）。"""
-    import app.agents.interview as iv
-    from app.agents.interview_strategy import build_strategy
-
-    def qtypes(sid):
-        sp = iv._profile_for(cfg, sid)
-        strategy = build_strategy(sp, cfg.interview_question_count)
-        slots = iv._plan_capabilities(sp, strategy)[: iv._per_skill_limit(cfg, strategy)]
-        return [qt.value for qt, _ in slots], [subj or qt.value for qt, subj in slots]
-
-    mech_types, mech_subj = qtypes("checkpoint")       # mechanism
-    fw_types, _ = qtypes("langgraph")                   # framework
-    api_types, _ = qtypes("llm_api")                    # api
-    pat_types, _ = qtypes("rag")                        # pattern
-
-    # 题型序列按 skill_type 分流
-    assert not _same_all(mech_types, fw_types, api_types, pat_types)
-    # mechanism 覆盖「场景」，题干锚定父框架能力点，而非空泛的「熟练度」
-    assert "scenario" in mech_types
-    assert any("checkpoint" in s or "state" in s.lower() for s in mech_subj)
-    # 前瞻性：api 类必含 API 题型，mechanism 不要求「implementation/独立实现」
-    assert "api" in api_types
-
-
-def _same_all(*seqs):
-    return all(s == seqs[0] for s in seqs[1:])
-
-
-def _finish_interview(client, tid: str, first_data: dict, answers_by_skill: dict, default: str = "我写过项目") -> dict:
-    """逐轮回答访谈直到 done：每轮从 artifacts.interview_question 取当前 skill_id，
-    用映射好的答案（缺省用 default）作答，返回最终 data。
-
-    题量已由固定 5 改为「按目标画像询问全部相关技能」+「每技能多个能力点」，
-    故这里用较宽松的轮询（而非硬编码长度）。
-    """
-    data = first_data
-    for _ in range(80):
-        if data.get("workflow_status") == "done":
-            return data
-        q = (data.get("artifacts") or {}).get("interview_question") or {}
-        sid = q.get("skill_id") or ""
-        data = _chat(client, tid, answers_by_skill.get(sid, default)).get_json()["data"]
-    raise AssertionError("访谈未在限定轮次内结束")
-
-
-def test_tech_learning_closed_loop(interview_client):
-    """目标画像 → 多轮访谈 → GapEngine：最终 done 并产出 deficit/learning_path/learning_plan。"""
-    tid = "N_LOOP_TECH"
-    first = _chat(interview_client, tid, "我想学 LangGraph").get_json()["data"]
-    assert first["workflow_status"] == "need_input"
-    final = _finish_interview(
-        interview_client,
-        tid,
-        first,
-        {
-            "langgraph": "没怎么接触过",              # 目标技能 → 0，必然进入缺口
-            "python": "我写过 Flask 项目和爬虫",      # Python → 3
-            "llm_api": "用 DeepSeek API 做过聊天机器人",  # LLM API → 3
-        },
-    )
-    assert final["workflow_status"] == "done"
-    assert "gap_engine" in final["steps"]
-    art = final["artifacts"]
-    assert art["intent"] == "tech_learning"
-    assert art["skill_gaps"]
-    assert art["learning_path"]
-    assert art["learning_plan"]
-    # 学习计划按学习路径排序，且目标技能 LangGraph 一定在缺口里
-    gap_ids = [g["skill_id"] for g in art["skill_gaps"]]
-    assert "langgraph" in gap_ids
-
-
-def test_job_search_closed_loop(interview_client):
-    """岗位求职闭环：访谈完成后 → 缺口 + 岗位匹配（recommended_roles）。"""
-    tid = "N_LOOP_JOB"
-    first = _chat(interview_client, tid, "我想找 AI Agent 工程师岗位").get_json()["data"]
-    assert first["workflow_status"] == "need_input"
-    final = _finish_interview(interview_client, tid, first, {"langgraph": "没怎么接触过"})
-    assert final["workflow_status"] == "done"
-    art = final["artifacts"]
-    assert art["intent"] == "job_search"
-    assert art["skill_gaps"]
-    assert art["recommended_roles"]
-    assert art["target_profile"]["goal_name"] == "AI Agent 工程师"

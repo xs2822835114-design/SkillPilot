@@ -15,16 +15,12 @@ class SkillMapState(TypedDict, total=False):
     intent: str
     # 业务状态快照（阶段 1 为空占位，阶段 3~6 填充）
     user_goal: str | None        # 用户原始目标名（目标画像 goal_name / 目标岗位/技能）
-    target_profile: dict | None  # 目标技能画像（TargetProfile 契约，供访谈/缺口复用）
-    user_profile: dict | None    # 用户技能画像（UserSkillProfile 契约，访谈产出）
-    skill_gaps: list             # 技能缺口（SkillGap 契约列表，GapEngine 产出）
+    target_profile: dict | None  # 目标技能画像（TargetProfile 契约，供学习计划生成复用）
     target_role: str | None
     skill_profile: dict
-    skill_gap: dict
     learning_plan: dict
     practice_plan: dict
     evaluation_report: dict
-    interview_state: dict          # 技能访谈会话状态（跨轮恢复，对齐架构方案第 17 节）
     retrieved_evidence: list
     memory_context: dict
     # 阶段 9：多 Agent 路由

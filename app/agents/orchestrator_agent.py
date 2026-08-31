@@ -258,7 +258,7 @@ class OrchestratorAgent(BaseAgent):
         """开启全新目标（Go → PHP）时，清理上一任务遗留的业务状态。
 
         区分「会话状态」（messages 长期保留）与「当前任务状态」：当前任务切换到新目标后，
-        旧的目标画像 / 访谈 / 计划 / artifacts 必须失效，否则会被路由或 reply_node 复用，
+        旧的目标画像 / 计划 / artifacts 必须失效，否则会被路由或 reply_node 复用，
         导致「换了学习目标却仍输出旧计划」。
         """
         return {
@@ -266,14 +266,10 @@ class OrchestratorAgent(BaseAgent):
             "user_goal": None,
             "target_role": None,
             "target_profile": None,
-            "user_profile": None,
-            "skill_gaps": [],
             "skill_profile": {},
-            "skill_gap": {},
             "learning_plan": {},
             "practice_plan": {},
             "evaluation_report": {},
-            "interview_state": {},
             "retrieved_evidence": [],
             "artifacts": {},
             "summary": "",
@@ -327,7 +323,7 @@ class OrchestratorAgent(BaseAgent):
             intent = intent_hint
 
         # 意图校正：plan_generation 需要显式「计划/路线」类措辞；仅「想学某技能」
-        # 应走 tech_learning 完整闭环（目标画像 → 访谈 → 缺口），避免 LLM 混淆两者。
+        # 应走 tech_learning 完整闭环（目标画像 → 学习计划），避免 LLM 混淆两者。
         if intent == "plan_generation" and intent_hint not in VALID_INTENTS:
             if not any(k in message for k in _INTENT_KEYWORDS["plan_generation"]) and any(
                 k in message for k in _INTENT_KEYWORDS["tech_learning"]
@@ -374,7 +370,6 @@ class OrchestratorAgent(BaseAgent):
                 bool(active_g)
                 or prev_intent in _BUSINESS_INTENTS
                 or state.get("target_profile") is not None
-                or (state.get("interview_state") or {}).get("active")
             )
             # 本轮点名了新目标、且确实与当前任务目标不同 → 切到新任务（进行一次状态清理）
             is_new_task = bool(turn_g) and has_prev_task and turn_g != active_g

@@ -6,13 +6,11 @@
 - Skill Knowledge（app.knowledge.learning_metadata 的技能分类）负责「提供事实」，
   决定机制/API/框架/概念类技能该怎么学，避免 LLM 把所有技能套成同一模板。
 
-触发路径（learning_plan_mode="direct"，默认）：
+触发路径：
   tech/job requirement（target_profile）
       → learning_plan_node（本 Agent）
       → LearningPlan（phases / tasks / estimated_hours / acceptance_criteria / steps / execution_steps）
       → 落库（todo_store）→ 前端「学习计划」页
-
-访谈链路（learning_plan_mode="interview"）作为可选「精准模式」保留，不由本模块承担。
 """
 
 from __future__ import annotations

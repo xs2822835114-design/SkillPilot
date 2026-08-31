@@ -12,15 +12,6 @@ from app.domain.skill import SkillRequirement, UserSkill
 from app.domain.role import Role
 from app.domain.requirement import JobRequirement, TechRequirement
 from app.domain.profile import TargetProfile, UserSkillProfile
-from app.domain.gap import SkillGap
-from app.domain.interview import (
-    InterviewOption,
-    InterviewQuestion,
-    InterviewQuestionType,
-    InterviewState,
-    InterviewStrategy,
-    SkillType,
-)
 
 __all__ = [
     "IntentResult",
@@ -32,11 +23,4 @@ __all__ = [
     "JobRequirement",
     "TargetProfile",
     "UserSkillProfile",
-    "SkillGap",
-    "SkillType",
-    "InterviewQuestionType",
-    "InterviewStrategy",
-    "InterviewQuestion",
-    "InterviewOption",
-    "InterviewState",
 ]

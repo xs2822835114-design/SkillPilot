@@ -2,7 +2,6 @@
 import { computed } from 'vue'
 import { useRouter } from 'vue-router'
 import ArtifactPanel from './ArtifactPanel.vue'
-import InterviewQuestion from './InterviewQuestion.vue'
 import TracePanel from './TracePanel.vue'
 import MarkdownRenderer from './../MarkdownRenderer.vue'
 
@@ -105,11 +104,6 @@ function phaseHours(phase) {
       >
         {{ gotoLabel }} →
       </button>
-      <InterviewQuestion
-        v-if="message.role === 'assistant' && message.status === 'ok' && message.artifacts?.interview_question"
-        :question="message.artifacts.interview_question"
-        :message-id="message.id"
-      />
       <ArtifactPanel
         v-if="message.role === 'assistant' && message.status === 'ok'"
         :artifacts="message.artifacts"

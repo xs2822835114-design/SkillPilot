@@ -9,7 +9,6 @@ from app.domain import (
     IntentType,
     JobRequirement,
     Role,
-    SkillGap,
     SkillRequirement,
     TargetProfile,
     TechRequirement,
@@ -90,10 +89,3 @@ def test_user_skill_profile():
     )
     assert u.skills[0].level == 3
     assert u.last_updated is not None
-
-
-def test_skill_gap():
-    g = SkillGap(skill_id="langgraph", current_level=1, target_level=4, gap=3, priority=0.8)
-    assert g.gap == 3
-    with pytest.raises(ValidationError):
-        SkillGap(skill_id="x", target_level=6)

@@ -384,46 +384,6 @@ def create_memory_tables(conn) -> None:
     print("memories / memory_events / pending_actions 表已就绪")
 
 
-def create_interview_tables(conn) -> None:
-    """阶段 10：AI 问答式能力评估表（会话/逐题答案，幂等）。"""
-    conn.execute(
-        """
-        CREATE TABLE IF NOT EXISTS interview_sessions (
-          id             TEXT PRIMARY KEY,
-          user_id        TEXT NOT NULL,
-          skill_id       TEXT NOT NULL,
-          skill_name     TEXT,
-          status         TEXT NOT NULL DEFAULT 'in_progress',
-          current_index  INT NOT NULL DEFAULT 0,
-          questions_json JSONB NOT NULL DEFAULT '[]',
-          scores_json    JSONB,
-          created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
-          finished_at    TIMESTAMPTZ
-        );
-        CREATE INDEX IF NOT EXISTS idx_interview_sessions_user
-          ON interview_sessions(user_id);
-        """
-    )
-    conn.execute(
-        """
-        CREATE TABLE IF NOT EXISTS interview_answers (
-          id         TEXT PRIMARY KEY,
-          session_id TEXT NOT NULL REFERENCES interview_sessions(id) ON DELETE CASCADE,
-          q_index    INT NOT NULL,
-          question   TEXT,
-          answer     TEXT,
-          score      INT,
-          feedback   TEXT,
-          created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-          UNIQUE (session_id, q_index)
-        );
-        CREATE INDEX IF NOT EXISTS idx_interview_answers_session
-          ON interview_answers(session_id);
-        """
-    )
-    print("interview_sessions / interview_answers 表已就绪")
-
-
 def create_teaching_tables(conn) -> None:
     """阶段 5b：AI 教学会话与回合表（user_id + task_id 唯一定位学习会话，支持恢复，幂等）。"""
     conn.execute(
@@ -492,7 +452,6 @@ def run() -> None:
         create_todo_tables(conn)
         create_eval_tables(conn)
         create_memory_tables(conn)
-        create_interview_tables(conn)
         create_teaching_tables(conn)
 
     print("数据库初始化完成")

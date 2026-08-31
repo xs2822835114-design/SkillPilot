@@ -70,33 +70,6 @@ def test_a2b_tech_learning_by_skill(client):
     assert "flask" in skill_ids
 
 
-def test_a2c_tech_learning_interview_option():
-    """TC-A2c（精准模式保留）：learning_plan_mode='interview' 时「我想学 Flask」→ 进入技能访谈首轮追问。"""
-    from app import create_app
-    from app.config import Config
-
-    cfg = Config(
-        env="test",
-        database_url="",
-        llm_api_key="",
-        checkpointer_backend="memory",
-        learning_plan_mode="interview",
-    )
-    flask_app = create_app(cfg)
-    flask_app.config["TESTING"] = True
-    interview_client = flask_app.test_client()
-    resp = _chat(interview_client, "A_T2C", "我想学 Flask")
-    assert resp.status_code == 200
-    data = resp.get_json()["data"]
-    assert data["route"] == "tech_learning"
-    assert data["workflow_status"] == "need_input"
-    assert "skill_interview_agent" in data["steps"]
-    assert "Flask" in data["reply"]
-    art = data["artifacts"]
-    assert art["intent"] == "tech_learning"
-    assert art["target_profile"]["goal_name"] == "Flask"
-
-
 def test_a7_plan_degraded_without_db(client):
     """TC-A7 降级：无 DB 时 plan_node → degraded 文案，HTTP 200 不 500。"""
     resp = _chat(client, "A_T7", "帮我生成学习计划，目标是 AI 应用工程师")

@@ -9,7 +9,7 @@
 - 节点是**纯函数**（读 State → 调 service → 合并回 State），不感知 HTTP；
 - 任何异常都不外抛：写 `state["error"]` 并降级，交由 reply_node 产出友好回复；
 - 缺必填入参 → `workflow_status="need_input"`，reply_node 追问可选值；
-- 目标画像统一落到 `target_profile`（TargetProfile 契约），供后续访谈/缺口复用一个模型。
+- 目标画像统一落到 `target_profile`（TargetProfile 契约），供学习计划生成复用。
 """
 from __future__ import annotations
 
@@ -55,10 +55,10 @@ def _done(summary: str, artifacts: dict, agent: str, **snapshots: dict) -> dict[
 # ---------------- plan ----------------
 
 def _plan_detail_reply(existing: list) -> dict[str, Any]:
-    """已有学习计划（本 thread 由访谈→缺口产生的 learning_plan）时，用户说「计划详细说说」等
+    """已有学习计划（本 thread 由学习计划生成器产生的 learning_plan）时，用户说「计划详细说说」等
     不是要新建计划，而是想细看既有计划：直接给出环节明细并引导到技能图谱/学习计划页。
 
-    existing 结构见 recommendation_engine.build_learning_plan，含 skill_name / level / steps。
+    existing 结构见学习计划生成器产出的 learning_plan，含 skill_name / level / steps。
     """
     lines = [
         f"你已有 {len(existing)} 项技能学习安排。按学习顺序，每个技能的环节如下（完整大纲可到「技能图谱」/「学习计划」页查看）："
@@ -226,128 +226,5 @@ def make_job_requirement_node(config: Config) -> Callable[[dict], dict]:
             target_profile=target.model_dump(),
             user_goal=target.goal_name,
         )
-
-    return node
-
-
-# ---------------- 缺口引擎（方案第 12、13、14、20 节） ----------------
-
-def _persist_chat_plan(config, user_id: str, target, plan_items: list) -> str | None:
-    """把访谈闭环产出的学习计划（plan_items，见 build_learning_plan）best-effort 落库，
-    使「学习计划」页（todo_store 按 user 读取）也能看到这份计划。无 DB 时返回 None。
-    """
-    if not config.database_url or not plan_items:
-        return None
-    try:
-        import uuid
-
-        from app.todo import todo_store
-        from app.todo.explain import build_acceptance
-        from app.todo.schemas import LearningPhase, LearningPlan, LearningTask
-
-        plan_id = f"PLAN_{uuid.uuid4().hex[:12]}"
-        tasks: list[LearningTask] = []
-        for idx, it in enumerate(plan_items, start=1):
-            name = it.get("skill_name") or it.get("skill_id") or "技能"
-            tasks.append(
-                LearningTask(
-                    task_id=f"{plan_id}-T{idx:02d}",
-                    skill_id=it.get("skill_id", ""),
-                    title=f"学习并掌握 {name}",
-                    estimated_hours=4.0,
-                    status="pending",
-                    acceptance_criteria=build_acceptance(name, int(it.get("gap") or 1)),
-                    steps=list(it.get("steps") or []),
-                    resources=[],
-                    required=True,
-                    order=idx,
-                )
-            )
-        plan = LearningPlan(
-            plan_id=plan_id,
-            user_id=user_id,
-            goal=f"{target.goal_name} 学习达成计划",
-            source_role=getattr(target, "goal_type", "") or "",
-            status="in_progress",
-            phases=[LearningPhase(phase_id="P1", title="学习路线", order=1, tasks=tasks, skill_ids=[t.skill_id for t in tasks])],
-            metrics={"total_tasks": len(tasks), "done_tasks": 0, "total_hours": 4.0 * len(tasks), "weeks_est": None},
-        )
-        # 精炼为执行级步骤（同 Planner 一致的 TaskRefinementAgent；best-effort）
-        try:
-            from app.agents.task_refinement import refine_learning_plan
-
-            refine_learning_plan(config, plan)
-        except Exception:  # noqa: BLE001
-            pass
-        todo_store.create_plan(
-            config, plan,
-            report={"target": target.goal_name, "skill_ids": [t.skill_id for t in tasks]},
-            skill_ids=[t.skill_id for t in tasks],
-        )
-        return plan_id
-    except Exception:  # noqa: BLE001 - 持久化 best-effort，失败不阻断主流程
-        logger.warning("访谈闭环计划落库失败 user=%s", user_id, exc_info=True)
-        return None
-
-
-def _gap_summary(intent: str, goal_name: str, gaps: list, path: list[str], roles: list | None) -> str:
-    if not gaps:
-        return f"太棒了，你对「{goal_name}」的目标技能都已达标，暂无明显缺口。"
-    top = "、".join(g.skill_name for g in gaps[:5])
-    line = f"针对「{goal_name}」，共识别 {len(gaps)} 项技能缺口，重点：{top}。"
-    if path:
-        names = {g.skill_id: g.skill_name for g in gaps}
-        seq = " → ".join(names.get(p, p) for p in path[:6])
-        line += f"建议学习顺序：{seq}" + (" …" if len(path) > 6 else "") + "。"
-    if roles:
-        r0 = roles[0]
-        line += f"与你最匹配的岗位是「{r0['role_name']}」（覆盖度 {r0['coverage']:.0%}）。"
-    return line
-
-
-def make_gap_node(config: Config) -> Callable[[dict], dict]:
-    """访谈完成 → 确定性缺口计算 + 学习路径（tech）/ 岗位匹配（job）。"""
-    from app.domain import TargetProfile, UserSkillProfile
-    from app.engines import build_learning_path, build_learning_plan, compute_gaps, recommend_roles
-
-    def node(state: dict) -> dict:
-        target_raw = state.get("target_profile")
-        user_raw = state.get("user_profile")
-        if not target_raw or not user_raw:
-            return _degraded("gap_engine", "画像缺失，无法计算技能缺口。")
-        try:
-            target = TargetProfile.model_validate(target_raw)
-            user = UserSkillProfile.model_validate({"user_id": state.get("user_id"), **user_raw} if "user_id" not in user_raw else user_raw)
-            gaps = compute_gaps(config, target, user)
-            path = build_learning_path(config, [g.skill_id for g in gaps])
-            learning_plan = build_learning_plan(config, gaps, path)
-            # 落库供「学习计划」页展示（best-effort）；plan_id/goto 让前端可一键跳到该页
-            plan_id = _persist_chat_plan(config, state.get("user_id") or "", target, learning_plan)
-            intent = target.goal_type
-            artifacts: dict[str, Any] = {
-                "intent": intent,
-                "target_profile": target_raw,
-                "user_profile": user.model_dump(mode="json"),
-                "skill_gaps": [g.model_dump(mode="json") for g in gaps],
-                "learning_path": path,
-                "learning_plan": learning_plan,
-                "goto": {"page": "plan"},
-            }
-            if plan_id:
-                artifacts["plan_id"] = plan_id
-            roles: list | None = None
-            if intent == "job_search":
-                roles = recommend_roles(config, user)
-                artifacts["recommended_roles"] = roles
-            summary = _gap_summary(intent, target.goal_name, gaps, path, roles)
-            return _done(
-                summary,
-                artifacts,
-                "gap_engine",
-                skill_gaps=[g.model_dump() for g in gaps],
-            )
-        except Exception:  # noqa: BLE001
-            logger.warning("gap_node 缺口计算失败", exc_info=True)
-            return _degraded("gap_engine", "技能缺口计算失败，请稍后再试。")
 
     return node
