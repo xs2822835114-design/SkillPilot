@@ -40,6 +40,14 @@ class _LLMContent(BaseModel):
     exercises: list[TeachingExercise] = Field(default_factory=list)
 
 
+# 按类生成时把 LLM 的 {"items":[...]} 逐项映射到领域模型
+_KIND_MODEL = {
+    "concepts": TeachingConcept,
+    "examples": TeachingExample,
+    "exercises": TeachingExercise,
+}
+
+
 class _LLMStart(BaseModel):
     opening: str = ""
     content: _LLMContent = Field(default_factory=_LLMContent)
@@ -53,7 +61,11 @@ class _LLMTurn(BaseModel):
 # ---------------- 生成教学会话 ----------------
 
 def generate(config: Config, req: TeachingRequest) -> TeachingSession:
-    """先生成首节教学内容（opening + 结构化 content），再存入会话内存。"""
+    """先生成首节教学内容（opening + 结构化 content），再存入会话内存。
+
+    提供给非流式 teach_start 使用；SSE 流式首节请使用 stream_start_opening + generate_content，
+    它们在 opening 制作流式的同时把结构化 content 放到后台线程并行生成，避免「等完整 JSON」。
+    """
     data = _llm_start(config, req) or _rule_start(req)
     session = TeachingSession(
         plan_id=req.plan_id,
@@ -66,6 +78,99 @@ def generate(config: Config, req: TeachingRequest) -> TeachingSession:
         content=data["content"],
     )
     return session
+
+
+def stream_start_opening(config: Config, req: TeachingRequest):
+    """流式产出首节 opening 文本（真实 token，非对完整串二次切片）。
+
+    - LLM 开启：用 astream 逐 token 产出，首 token 到达即返回，让前端尽快显示；
+    - LLM 关闭/失败：回退规则开场并整体吐出（保证接口可用、教学不中断）。
+    """
+    if not config.llm_enabled:
+        yield _rule_opening(req)
+        return
+    try:
+        from langchain_core.prompts import ChatPromptTemplate
+        from langchain_openai import ChatOpenAI
+
+        model = ChatOpenAI(
+            model=config.llm_model,
+            base_url=config.llm_base_url,
+            api_key=config.llm_api_key,
+            temperature=0.6,
+        )
+        chain = ChatPromptTemplate.from_messages(
+            [
+                ("system", _OPENING_SYSTEM_PROMPT),
+                ("human", _opening_human(req)),
+            ]
+        ) | model
+        got = False
+        for chunk in chain.stream({"task": _task_context(req)}):
+            text = getattr(chunk, "content", None)
+            if text:
+                got = True
+                yield text
+        if not got:
+            yield _rule_opening(req)
+    except Exception:  # noqa: BLE001 - 开场流式失败回退规则，不阻断主链路
+        logger.warning("stream_start_opening 失败，回退规则开场", exc_info=True)
+        yield _rule_opening(req)
+
+
+def generate_content(config: Config, req: TeachingRequest) -> TeachingContent:
+    """仅生成结构化教学内容（concepts / examples / exercises），供 done 携带。
+
+    与 stream_start_opening 并行执行，互不等待；失败或 LLM 关闭时回退规则内容
+    （永远返回一个合法的 TeachingContent，绝不让首节 done 缺内容）。
+    """
+    if not config.llm_enabled:
+        return _rule_content(req)
+    try:
+        data = _llm(config, 0.4)(_CONTENT_SYSTEM_PROMPT, human=_content_human(req))
+        inner = _LLMContent(**data.get("content") or {})
+        return TeachingContent(
+            concepts=list(inner.concepts),
+            examples=list(inner.examples),
+            exercises=list(inner.exercises),
+        )
+    except Exception:  # noqa: BLE001
+        logger.warning("generate_content 失败，回退规则内容", exc_info=True)
+        return _rule_content(req)
+
+
+def rule_content(req: TeachingRequest) -> TeachingContent:
+    """公开的规则兜底内容生成（供路由层在内容线程异常/超时时使用，避免再触发 LLM）。"""
+    return _rule_content(req)
+
+
+# 结构化教学内容按「概念 → 示例 → 练习」三类拆分，各自独立生成并即时下发，
+# 避免一次性生成完整 JSON 时要等 20s+ 才能看到任何结构化内容（前端逐类增量补齐）。
+def generate_content_parts(config: Config, req: TeachingRequest):
+    """逐个产出三类结构化内容：(kind, items)。
+
+    kind ∈ concepts | examples | exercises；每类单独一次 LLM 调用，失败回落该类规则兜底，
+    任一时刻前端都能拿到「已完成的类」即时渲染，而非等全部 JSON 完成。
+    """
+    for kind in ("concepts", "examples", "exercises"):
+        yield kind, _gen_content_kind(config, req, kind)
+
+
+def _gen_content_kind(config: Config, req: TeachingRequest, kind: str) -> list:
+    """生成某一类结构化内容（concepts/examples/exercises）。"""
+    model = _KIND_MODEL[kind]
+    if config.llm_enabled:
+        try:
+            data = _llm(config, 0.4)(_KIND_SYSTEM_PROMPTS[kind], human=_kind_human(req, kind))
+            raw = data.get("items") or []
+            out: list = []
+            for it in raw[:6]:
+                out.append(model(**{k: it.get(k) for k in model.model_fields if k in it}))
+            if out:
+                return out
+        except Exception:  # noqa: BLE001 - 单类失败回落该类的规则兜底，不阻断增量推进
+            logger.warning("generate_content kind=%s 失败，回退规则", kind, exc_info=True)
+    return list(getattr(_rule_content(req), kind))
 
 
 # ---------------- 多轮互动 ----------------
@@ -165,27 +270,38 @@ def _extract_json(text: str) -> str:
 
 # ---------------- 规则兜底 ----------------
 
-def _rule_start(req: TeachingRequest) -> dict:
+def _rule_opening(req: TeachingRequest) -> str:
     name = req.skill_name or req.task_title
+    return (
+        f"我们开始学习「{name}」。\n本次目标：{req.learning_objective or req.task_title}。\n"
+        f"学完后，你应该能达成：{req.acceptance_criteria or ('掌握' + name + '并能完成一次可运行验证')}。"
+    )
+
+
+def _rule_content(req: TeachingRequest) -> TeachingContent:
+    name = req.skill_name or req.task_title
+    return TeachingContent(
+        concepts=[
+            TeachingConcept(title="核心概念", explanation=f"围绕 {name} 的核心概念、作用与适用场景展开。"),
+            TeachingConcept(title="工作原理", explanation=f"说明 {name} 在父框架上下文中的运作机制与关键要素。"),
+        ],
+        examples=[
+            TeachingExample(title="最小示例", explanation="给出一个可运行的最小示例，观察行为/输出变化。", code="# 最小示例代码占位\n"),
+        ],
+        exercises=[
+            TeachingExercise(
+                title="练习与验收",
+                instruction=f"参照示例，独立完成与 {name} 相关的一次小实验/小实现，并验证结果符合预期。",
+                expected_result=req.acceptance_criteria,
+            )
+        ],
+    )
+
+
+def _rule_start(req: TeachingRequest) -> dict:
     return {
-        "opening": f"我们开始学习「{name}」。\n本次目标：{req.learning_objective or req.task_title}。\n"
-        f"学完后，你应该能达成：{req.acceptance_criteria or '掌握' + name + '并能完成一次可运行验证'}。",
-        "content": TeachingContent(
-            concepts=[
-                TeachingConcept(title="核心概念", explanation=f"围绕 {name} 的核心概念、作用与适用场景展开。"),
-                TeachingConcept(title="工作原理", explanation="说明 {name} 在父框架上下文中的运作机制与关键要素。".format(name=name)),
-            ],
-            examples=[
-                TeachingExample(title="最小示例", explanation="给出一个可运行的最小示例，观察行为/输出变化。", code="# 最小示例代码占位\n"),
-            ],
-            exercises=[
-                TeachingExercise(
-                    title="练习与验收",
-                    instruction=f"参照示例，独立完成与 {name} 相关的一次小实验/小实现，并验证结果符合预期。",
-                    expected_result=req.acceptance_criteria,
-                )
-            ],
-        ),
+        "opening": _rule_opening(req),
+        "content": _rule_content(req),
     }
 
 
@@ -198,7 +314,7 @@ def _rule_turn(user_message: str) -> dict:
 
 # ---------------- Prompt ----------------
 
-def _start_human(req: TeachingRequest) -> str:
+def _task_context(req: TeachingRequest) -> str:
     steps = "\n".join(f"- {s.title or s.action}" for s in (req.execution_steps or [])) or "\n".join(
         f"- {s}" for s in (req.steps or [])
     )
@@ -209,12 +325,40 @@ def _start_human(req: TeachingRequest) -> str:
         f"学习目标要点：{req.learning_objective}\n"
         f"验收标准：{req.acceptance_criteria}\n"
         f"执行步骤：\n{steps}\n\n"
+    )
+
+
+def _start_human(req: TeachingRequest) -> str:
+    return (
+        _task_context(req)
         # 花括号转义为 {{/}} 以规避 ChatPromptTemplate 将其解析为模板变量
-        "只输出一段合法 JSON（不要 markdown 代码块），结构如下：\n"
+        + "只输出一段合法 JSON（不要 markdown 代码块），结构如下：\n"
         '{{"opening":"1~2 句口语开场并明确本次目标",'
         '"content":{{"concepts":[{{"title":"概念名","explanation":"概念讲解"}}],'
         '"examples":[{{"title":"示例名","explanation":"讲解","code":"可选，代码"}}],'
         '"exercises":[{{"title":"练习名","instruction":"做什么","expected_result":"预期结果","hint":"可选提示"}}]}}}}'
+    )
+
+
+def _opening_human(req: TeachingRequest) -> str:
+    return (
+        f"技能：{req.skill_name}（id: {req.skill_id}）\n"
+        f"任务标题（学习目标）：{req.task_title}\n"
+        f"学习目标要点：{req.learning_objective}\n"
+        f"验收标准：{req.acceptance_criteria}\n"
+    )
+
+
+def _content_human(req: TeachingRequest) -> str:
+    return _task_context(req)
+
+
+def _kind_human(req: TeachingRequest, kind: str) -> str:
+    """仅要求模型输出某一类的一条 items 列表（单类更小更快，便于走增量下发）。JSON 花括号需转义。"""
+    return (
+        _task_context(req)
+        + f"本阶段只生成「{kind}」这一类，不要输出其他类型。只输出一段合法 JSON（不要 markdown 代码块）：\n"
+        + f"{{{{\"items\":[{_KIND_ITEM_SCHEMA[kind]}]}}}}"
     )
 
 
@@ -234,6 +378,43 @@ def _turn_human(session: TeachingSession, user_message: str) -> str:
 
 
 # ---------------- Prompt 表 ----------------
+
+# 按类生成：只要求输出某一类的 items，输出更短更快，逐个经 SSE content_part 下发
+_KIND_ITEM_SCHEMA = {
+    "concepts": '{{"title":"概念名","explanation":"概念讲解"}}',
+    "examples": '{{"title":"示例名","explanation":"一句讲解","code":"短而完整的可运行代码(5~12行)"}}',
+    "exercises": '{{"title":"练习名","instruction":"做什么","expected_result":"预期结果","hint":"可选提示"}}',
+}
+
+# 按类生成：只要求输出某一类的 items，输出更短更快，逐个经 SSE content_part 下发
+_KIND_SYSTEM_PROMPTS = {
+    "concepts": """你是 SkillPilot 的 TeachingAgent——耐心的技术讲师。针对下面的学习任务，只生成「核心概念」这一类。
+输出 3~5 个概念，每个含 title 与 explanation，用通俗语言讲清「是什么、为什么、怎么用」。只输出一段合法 JSON：{{"items":[...]}}，不要 markdown 代码块、不要输出其他类型。不是「概念」内容的一律不要。""",
+    # Examples 性能专项：把输出 token 压缩下来——每示例只讲一个知识点、代码 5~12 行、一句话讲解。
+    # profiling 证实耗时 ~ 输出 token（代码 token 尤其拖慢），故硬性约束代码规模与讲解长度。
+    "examples": """你是 SkillPilot 的 TeachingAgent——耐心的技术讲师。针对下面的学习任务，只生成「代码示例」这一类，共 2~3 个。硬性要求：
+- 每个示例「只」演示一个核心知识点，不要混讲多个；
+- 代码必须完整且可运行，但克制规模：每段 code 控制在 5~12 行以内、不超过 200 个 token；
+- explanation 只用一句话讲清这段演示了什么、关键点在哪，不写背景、不串联上下文；
+- 禁止重复教学内容，禁止输出与当前学习任务无关的内容；
+- 不要给出完整工程、目录结构、build/运行步骤或多余注释。
+每个示例只含 title / explanation / code 三个字段。只输出一段合法 JSON：{{"items":[...]}}，不要 markdown 代码块、不要输出其他类型。禁止编造不存在的 API。""",
+    "exercises": """你是 SkillPilot 的 TeachingAgent——耐心的技术讲师。针对下面的学习任务，只生成「练习与验收」这一类。
+输出 1~3 个贴合验收标准的练习，每个含 title、instruction、expected_result、可选 hint，引导动手验证而非空谈。只输出一段合法 JSON：{{"items":[...]}}，不要 markdown 代码块、不要输出其他类型。""",
+}
+
+_OPENING_SYSTEM_PROMPT = """你是 SkillPilot 的 TeachingAgent——一名耐心的技术讲师。用户即将开始学习一个具体任务。
+请用 1~3 句口语开场，向用户点明本次学习目标与验收标准，不要加 markdown 标题、不要列表、不要代码。
+直接输出开场文本即可，不要输出 JSON。"""
+
+# 结构化内容：只产出 concepts / examples / exercises（不包含 opening），后台线程并行生成。
+# 注意：system 消息也会被 ChatPromptTemplate 渲染，JSON 花括号必须转义为 {{/}}。
+_CONTENT_SYSTEM_PROMPT = """你是 SkillPilot 的 TeachingAgent——一名耐心的技术讲师。针对下面这个学习任务，生成结构化教学内容。
+只输出一段合法 JSON（不要 markdown 代码块），结构如下：
+{{"content":{{"concepts":[{{"title":"概念名","explanation":"概念讲解"}}],
+"examples":[{{"title":"示例名","explanation":"讲解","code":"可选，代码"}}],
+"exercises":[{{"title":"练习名","instruction":"做什么","expected_result":"预期结果","hint":"可选提示"}}]}}}}
+要求：concepts 3~6 个、examples 1~3 个、exercises 1~3 个，紧密围绕任务的学习目标与验收标准，禁止编造不存在的 API；不确定的用法用「...」占位并说明。"""
 
 _START_SYSTEM_PROMPT = """你是 SkillPilot 的 TeachingAgent——一名耐心的技术讲师，负责针对「一个学习任务」开展 AI 技术教学。
 

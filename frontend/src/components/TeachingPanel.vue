@@ -1,6 +1,7 @@
 <script setup>
 import { ref, watch, nextTick, onBeforeUnmount } from 'vue'
 import { streamTeach, sendTeachingMessage } from '@/api/teaching'
+import MarkdownRenderer from './MarkdownRenderer.vue'
 
 const props = defineProps({
   plan: { type: Object, default: null },
@@ -16,7 +17,15 @@ const turns = ref([])
 const draft = ref('')
 const sending = ref(false)
 
+// 结构化内容按「概念→示例→练习」逐类增量补全（SSE content_part 事件逐个 push）
+const concepts = ref([])
+const examples = ref([])
+const exercises = ref([])
+
+const _bucket = { concepts, examples, exercises }
+
 let aborter = null
+let tStart = 0
 
 const planId = () => props.plan?.plan_id
 
@@ -30,22 +39,44 @@ function applySession(sess) {
   opening.value = sess.opening || ''
   // 恢复历史回合（用户关闭窗口后再进入同一任务时由后端回传）
   turns.value = (sess.turns || []).map(toTurn)
+  // done 携带完整 content，全量覆盖增量 refs，保证最终一致
+  const c = sess.content || {}
+  concepts.value = c.concepts || []
+  examples.value = c.examples || []
+  exercises.value = c.exercises || []
+  console.debug(`[Teaching] done TTF(第一token)≈${tFirstToken ?? 'n/a'}ms TTC(完整内容)≈${tStart ? Math.round(performance.now() - tStart) : 'n/a'}ms`)
 }
+
+let tFirstToken = null
 
 function start() {
   if (!props.task || !props.plan) return
   session.value = null
   opening.value = ''
   turns.value = []
+  concepts.value = []
+  examples.value = []
+  exercises.value = []
   error.value = ''
   streaming.value = true
+  tStart = performance.now()
+  tFirstToken = null
   aborter?.abort()
   aborter = new AbortController()
   streamTeach(planId(), props.task.task_id, {
     signal: aborter.signal,
     onEvent: (evt) => {
-      if (evt.type === 'delta') opening.value += evt.text
-      else if (evt.type === 'done') {
+      if (evt.type === 'delta') {
+        if (tFirstToken === null) {
+          tFirstToken = Math.round(performance.now() - tStart)
+          console.debug(`[Teaching] 首 delta 到达：${tFirstToken}ms`)
+        }
+        opening.value += evt.text
+      } else if (evt.type === 'content_part') {
+        // 单个类生成完成 → 增量补齐对应数组
+        const bucket = _bucket[evt.kind]
+        if (bucket) bucket.value = bucket.value.concat(evt.items || [])
+      } else if (evt.type === 'done') {
         applySession(evt)
         streaming.value = false
       } else if (evt.type === 'error') {
@@ -112,45 +143,48 @@ function quick(mode) {
             <div class="block">
               <span class="label">AI 教学</span>
               <div class="ai-text">
-                <template v-if="streaming">{{ opening }}<span class="cursor">▍</span></template>
-                <template v-else>{{ opening }}</template>
+                <span v-if="streaming && !opening" class="prep">
+                  正在准备本次学习内容<span class="dots">…</span><span class="cursor2">▍</span>
+                </span>
+                <MarkdownRenderer v-if="opening" :content="opening" />
+                <span class="cursor" v-else-if="streaming && opening">▍</span>
               </div>
             </div>
 
             <div v-if="error" class="err">{{ error }}<button class="link" @click="start">重试</button></div>
 
-            <template v-if="session">
-              <div v-if="session.concepts && session.concepts.length" class="block">
-                <span class="label">核心概念</span>
-                <div v-for="c in session.concepts" :key="c.title" class="card">
-                  <b>{{ c.title }}</b>
-                  <p>{{ c.explanation }}</p>
-                </div>
+            <!-- 结构化内容按类独立展示：某类经 content_part 到达即显示，不依赖 done/session -->
+            <div v-if="concepts.length" class="block">
+              <span class="label">核心概念</span>
+              <div v-for="c in concepts" :key="c.title" class="card">
+                <b>{{ c.title }}</b>
+                <p>{{ c.explanation }}</p>
               </div>
+            </div>
 
-              <div v-if="session.examples && session.examples.length" class="block">
-                <span class="label">代码示例</span>
-                <div v-for="e in session.examples" :key="e.title" class="card">
-                  <b>{{ e.title }}</b>
-                  <p v-if="e.explanation">{{ e.explanation }}</p>
-                  <pre v-if="e.code" class="code">{{ e.code }}</pre>
-                </div>
+            <div v-if="examples.length" class="block">
+              <span class="label">代码示例</span>
+              <div v-for="e in examples" :key="e.title" class="card">
+                <b>{{ e.title }}</b>
+                <p v-if="e.explanation">{{ e.explanation }}</p>
+                <pre v-if="e.code" class="code">{{ e.code }}</pre>
               </div>
+            </div>
 
-              <div v-if="session.exercises && session.exercises.length" class="block">
-                <span class="label">练习与验收</span>
-                <div v-for="x in session.exercises" :key="x.title" class="card">
-                  <b>{{ x.title }}</b>
-                  <p>{{ x.instruction }}</p>
-                  <p v-if="x.expected_result" class="hint">期望结果：{{ x.expected_result }}</p>
-                </div>
+            <div v-if="exercises.length" class="block">
+              <span class="label">练习与验收</span>
+              <div v-for="x in exercises" :key="x.title" class="card">
+                <b>{{ x.title }}</b>
+                <p>{{ x.instruction }}</p>
+                <p v-if="x.expected_result" class="hint">期望结果：{{ x.expected_result }}</p>
               </div>
-            </template>
+            </div>
 
             <!-- 多轮互动 -->
             <div v-for="(t, i) in turns" :key="i" class="turn" :class="t.role">
               <b>{{ t.role === 'user' ? '你' : 'AI' }}</b>
-              <p>{{ t.content }}</p>
+              <MarkdownRenderer v-if="t.role === 'ai'" class="turn-md" :content="t.content" />
+              <p v-else>{{ t.content }}</p>
             </div>
             <div v-if="sending" class="turn ai"><p class="cursor-blank">正在思考…</p></div>
           </div>
@@ -246,8 +280,11 @@ function quick(mode) {
   border-radius: 999px;
   margin-bottom: 8px;
 }
-.ai-text { font-size: 14px; line-height: 1.7; color: var(--text); white-space: pre-wrap; }
-.cursor { animation: blink 0.9s infinite; color: var(--accent); }
+.ai-text { font-size: 14px; line-height: 1.7; color: var(--text); }
+.prep { color: var(--text-2); font-size: 13px; }
+.dots { animation: blink 1.2s infinite; }
+.cursor2 { margin-left: 2px; animation: blink 0.9s infinite; color: var(--accent); }
+.cursor { display: inline-block; margin-left: 1px; animation: blink 0.9s infinite; color: var(--accent); }
 @keyframes blink { 50% { opacity: 0; } }
 .card {
   border: 1px solid var(--border);
@@ -286,6 +323,19 @@ function quick(mode) {
   white-space: pre-wrap;
 }
 .turn.user p { background: var(--accent); color: #fff; }
+/* AI 回合的 Markdown 气泡：与 .turn p 保持一致的视觉（背景/圆角/内边距/限宽） */
+.turn-md {
+  display: inline-block;
+  max-width: 85%;
+  text-align: left;
+  margin: 0;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: var(--accent-soft);
+  color: var(--text);
+  line-height: 1.6;
+}
+.turn-md :deep(.markdown-body) { font-size: 13px; }
 .cursor-blank { background: transparent !important; color: var(--text-3); }
 .composer { border-top: 1px solid var(--border); padding: 12px 18px; }
 .quick { display: flex; gap: 8px; margin-bottom: 10px; }

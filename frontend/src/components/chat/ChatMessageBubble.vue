@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 import ArtifactPanel from './ArtifactPanel.vue'
 import InterviewQuestion from './InterviewQuestion.vue'
 import TracePanel from './TracePanel.vue'
+import MarkdownRenderer from './../MarkdownRenderer.vue'
 
 const props = defineProps({
   message: { type: Object, required: true },
@@ -50,9 +51,16 @@ function phaseHours(phase) {
       <div v-if="message.status === 'error'" class="error">
         {{ message.error || '请求失败，请稍后重试' }}
       </div>
-      <p v-else class="text">
-        {{ message.content || '…' }}<span v-if="message.status === 'streaming'" class="caret" />
+      <!-- 用户消息：保持纯文本渲染，不做 Markdown / 不当作 HTML 执行 -->
+      <p v-else-if="message.role === 'user'" class="text">
+        {{ message.content }}<span v-if="message.status === 'streaming'" class="caret" />
       </p>
+      <!-- Agent 消息：统一走 MarkdownRenderer 安全渲染 -->
+      <div v-else class="text md-content">
+        <MarkdownRenderer v-if="message.content" :content="message.content" />
+        <span v-else>…</span>
+        <span v-if="message.status === 'streaming'" class="caret" />
+      </div>
 
       <!-- 计划正在生成：已预判定为计划意图但阶段尚未到达时，显示生动的生成中提示 -->
       <div
@@ -177,6 +185,13 @@ function phaseHours(phase) {
   color: var(--text);
   font-size: 15px;
 }
+/* Agent 消息的 Markdown 容器：交给 .markdown-body 处理块级排版，避免继承 pre-wrap */
+.md-content {
+  white-space: normal;
+  line-height: 1.7;
+  font-size: 14px;
+}
+.md-content :deep(.markdown-body) { font-size: 14px; }
 .meta {
   margin-top: 8px;
   font-size: 12.5px;

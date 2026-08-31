@@ -8,6 +8,8 @@ POST /api/v1/teaching/<session_id>/message                    -- 多轮互动（
 """
 from __future__ import annotations
 
+import time
+
 from flask import Blueprint, Response, current_app, request, stream_with_context
 
 from app.api.errors import (
@@ -21,7 +23,7 @@ from app.api.errors import (
     ok_response,
 )
 from app.api.schemas import first_validation_error
-from app.teaching.schemas import ROLE_USER, TeachingMessageRequest, TeachingRequest, TeachingStartRequest, TeachingTurn
+from app.teaching.schemas import ROLE_USER, TeachingContent, TeachingMessageRequest, TeachingRequest, TeachingSession, TeachingStartRequest, TeachingTurn
 
 teaching_bp = Blueprint("teaching", __name__)
 
@@ -104,34 +106,98 @@ def teach_start(plan_id: str, task_id: str):
 
 @teaching_bp.post("/api/v1/plan/<plan_id>/tasks/<task_id>/teach/stream")
 def teach_start_stream(plan_id: str, task_id: str):
-    """SSE 流式首节教学：先下发 meta（含任务信息），再流式输出 opening 文本，
-    最后 done 携带完整的结构化 TeachingSession（含 session_id，供后续多轮互动用）。"""
+    """SSE 流式首节教学（性能优化版）。
+
+    关键时序（目标是「点击 → 尽快看到第一段内容」）：
+    1. 同步段只做轻量数据库准备（计划/技能名/会话存在性），不调 LLM；
+    2. ``meta`` 首帧**在阻塞业务前立即下发**，让前端弹窗瞬间拿到任务信息；
+    3. 新会话：opening 走真实 ``astream`` 逐 token 下发（首 token 即显示），
+       结构化 content（concepts/examples/exercises）放进**后台线程**与开场并行生成；
+    4. 恢复会话：不做任何 LLM 调用，直接下发 done 回显历史（仅一次 DB 读取）。
+    """
+    t_route = time.perf_counter()
     _ensure_db()
     req = _load_task(plan_id, task_id)
     req.skill_name = _skill_name(_config(), req.skill_id)
+    current_app.logger.info(
+        "[Teaching] stream entry plan=%s task=%s sync_prep=%.0fms",
+        plan_id, task_id, (time.perf_counter() - t_route) * 1000,
+    )
 
     from app.teaching import session_store, teaching_agent
 
-    # 稳定恢复：同一任务已有学习会话则复用（含历史回合），否则新建后持久化
-    recovered = session_store.load_by_task(_config(), req.user_id, req.task_id)
+    cfg = _config()  # 捕获 Config（后台线程无 Flask app context，需直接传对象）
+
+    # 稳定恢复：同一任务已有会话则复用（含历史回合），否则进入新建 + 流式生成路径
+    recovered = session_store.load_by_task(cfg, req.user_id, req.task_id)
+    current_app.logger.info(
+        "[Teaching] session_load done recovered=%s %.0fms",
+        recovered is not None, (time.perf_counter() - t_route) * 1000,
+    )
 
     def generate():
-        session = recovered
-        is_new = session is None
-        try:
-            if session is None:
-                session = teaching_agent.generate(_config(), req)
-                session_store.save(_config(), session)
+        # 恢复路径：无任何 LLM 调用，仅回传历史快照
+        if recovered is not None:
             yield _sse("meta", {"task_id": task_id, "title": req.task_title})
-        except Exception:  # noqa: BLE001
-            current_app.logger.warning("AI 教学流式生成异常", exc_info=True)
-            yield _sse("error", {"message": "AI 教学生成失败，请重试"})
+            yield _sse("done", recovered.model_dump())
             return
-        if is_new:
-            for i in range(0, len(session.opening), _CHUNK):
-                yield _sse("delta", {"text": session.opening[i : i + _CHUNK]})
-        # done 携带完整会话（含 turns 历史），前端据此恢复 / 渲染
-        yield _sse("done", session.model_dump())
+
+        t0 = time.perf_counter()
+        try:
+            yield _sse("meta", {"task_id": task_id, "title": req.task_title})
+            current_app.logger.info("[Teaching] meta sent +%.0fms", (time.perf_counter() - t0) * 1000)
+
+            # 真实流式开场：逐 token 下发，首 token 到达即显示
+            t_llm = time.perf_counter()
+            opening_parts: list[str] = []
+            first_token_ms = None
+            for tok in teaching_agent.stream_start_opening(cfg, req):
+                if first_token_ms is None:
+                    first_token_ms = (time.perf_counter() - t_llm) * 1000
+                opening_parts.append(tok)
+                yield _sse("delta", {"text": tok})
+            opening = "".join(opening_parts)
+            current_app.logger.info(
+                "[Teaching] opening first_token=%.0fms total=%.0fms chars=%d",
+                first_token_ms or 0, (time.perf_counter() - t_llm) * 1000, len(opening),
+            )
+
+            # 结构化内容按「概念→示例→练习」逐类生成即推（content_part），不等全部 JSON，
+            # 前端逐类增量补齐，避免一次生成 20s+ 才看到任何结构化内容。
+            concepts, examples, exercises = [], [], []
+            for kind, items in teaching_agent.generate_content_parts(cfg, req):
+                bucket = {"concepts": concepts, "examples": examples, "exercises": exercises}[kind]
+                bucket.extend(items)
+                yield _sse("content_part", {"kind": kind, "items": [i.model_dump() for i in items]})
+                current_app.logger.info(
+                    "[Teaching] content_part %s n=%d +%.0fms", kind, len(items), (time.perf_counter() - t0) * 1000,
+                )
+            content = TeachingContent(concepts=concepts, examples=examples, exercises=exercises)
+            current_app.logger.info(
+                "[Teaching] content all ready +%.0fms", (time.perf_counter() - t0) * 1000,
+            )
+
+            session = TeachingSession(
+                plan_id=req.plan_id,
+                task_id=req.task_id,
+                user_id=req.user_id,
+                title=f"{req.skill_name or req.task_title} 学习",
+                learning_objective=req.learning_objective or req.task_title,
+                acceptance_criteria=req.acceptance_criteria or "",
+                opening=opening,
+                content=content,
+            )
+            session_store.save(cfg, session)
+            current_app.logger.info(
+                "[Teaching] session saved +%.0fms -> done", (time.perf_counter() - t0) * 1000,
+            )
+            yield _sse("done", session.model_dump())
+        except Exception as exc:  # noqa: BLE001
+            current_app.logger.warning("AI 教学流式生成异常（已回退）", exc_info=True)
+            try:
+                yield _sse("error", {"message": "AI 教学准备失败，请重试"})
+            except Exception:  # noqa: BLE001 - 客户端已断开则静默
+                pass
 
     return Response(stream_with_context(generate()), content_type="text/event-stream")
 
@@ -177,7 +243,7 @@ def teach_history(session_id: str):
     return ok_response(session.model_dump())
 
 
-_CHUNK = 4  # 流式打字机字符数
+_CHUNK = 4  # 流式打字机字符数（已废弃，保留兼容）
 
 
 def _sse(event: str, data: dict) -> str:
