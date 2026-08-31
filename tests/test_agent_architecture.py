@@ -14,6 +14,23 @@ def cfg():
     return Config(env="test", database_url="", llm_api_key="", checkpointer_backend="memory")
 
 
+@pytest.fixture()
+def interview_client():
+    """访谈精准模式（learning_plan_mode='interview'）的 test_client，用于目标画像→访谈→缺口闭环。"""
+    from app import create_app
+
+    app_cfg = Config(
+        env="test",
+        database_url="",
+        llm_api_key="",
+        checkpointer_backend="memory",
+        learning_plan_mode="interview",
+    )
+    flask_app = create_app(app_cfg)
+    flask_app.config["TESTING"] = True
+    return flask_app.test_client()
+
+
 def _chat(client, thread_id: str, message: str, **overrides):
     body = {"user_id": "U10001", "thread_id": thread_id, "message": message, **overrides}
     return client.post("/api/v1/chat", json=body)
@@ -54,8 +71,8 @@ def test_route_chat_unchanged(client):
 # need_input（访谈追问）收尾，target_profile 仍随 artifacts 透出供前端展示。
 
 
-def test_job_search_builds_target_profile(client):
-    resp = _chat(client, "N_J2", "我想找 AI Agent 工程师岗位")
+def test_job_search_builds_target_profile(interview_client):
+    resp = _chat(interview_client, "N_J2", "我想找 AI Agent 工程师岗位")
     data = resp.get_json()["data"]
     assert data["route"] == "job_search"
     # 目标画像已建立 → 进入技能访谈（首轮追问）
@@ -72,8 +89,8 @@ def test_job_search_builds_target_profile(client):
     assert "llm_api" in ids
 
 
-def test_tech_learning_builds_target_profile(client):
-    resp = _chat(client, "N_T2", "我想学 LangGraph")
+def test_tech_learning_builds_target_profile(interview_client):
+    resp = _chat(interview_client, "N_T2", "我想学 LangGraph")
     data = resp.get_json()["data"]
     assert data["route"] == "tech_learning"
     # 目标画像已建立 → 进入技能访谈（首轮追问）
@@ -182,13 +199,13 @@ def _finish_interview(client, tid: str, first_data: dict, answers_by_skill: dict
     raise AssertionError("访谈未在限定轮次内结束")
 
 
-def test_tech_learning_closed_loop(client):
+def test_tech_learning_closed_loop(interview_client):
     """目标画像 → 多轮访谈 → GapEngine：最终 done 并产出 deficit/learning_path/learning_plan。"""
     tid = "N_LOOP_TECH"
-    first = _chat(client, tid, "我想学 LangGraph").get_json()["data"]
+    first = _chat(interview_client, tid, "我想学 LangGraph").get_json()["data"]
     assert first["workflow_status"] == "need_input"
     final = _finish_interview(
-        client,
+        interview_client,
         tid,
         first,
         {
@@ -209,12 +226,12 @@ def test_tech_learning_closed_loop(client):
     assert "langgraph" in gap_ids
 
 
-def test_job_search_closed_loop(client):
+def test_job_search_closed_loop(interview_client):
     """岗位求职闭环：访谈完成后 → 缺口 + 岗位匹配（recommended_roles）。"""
     tid = "N_LOOP_JOB"
-    first = _chat(client, tid, "我想找 AI Agent 工程师岗位").get_json()["data"]
+    first = _chat(interview_client, tid, "我想找 AI Agent 工程师岗位").get_json()["data"]
     assert first["workflow_status"] == "need_input"
-    final = _finish_interview(client, tid, first, {"langgraph": "没怎么接触过"})
+    final = _finish_interview(interview_client, tid, first, {"langgraph": "没怎么接触过"})
     assert final["workflow_status"] == "done"
     art = final["artifacts"]
     assert art["intent"] == "job_search"

@@ -66,19 +66,19 @@ def stream_reply(
     except Exception:  # noqa: BLE001
         flask_app = None
 
-    result_q: "queue.Queue" = queue.Queue(maxsize=1)
+    result_q: "queue.Queue" = queue.Queue()
 
-    def _background_compute() -> None:
+    def _bg_compute() -> None:
         try:
             if flask_app is not None:
                 with flask_app.app_context():
-                    result_q.put(_compute(config, user_id, thread_id, message, hint))
+                    _compute_stream(config, user_id, thread_id, message, hint, result_q)
             else:
-                result_q.put(_compute(config, user_id, thread_id, message, hint))
+                _compute_stream(config, user_id, thread_id, message, hint, result_q)
         except Exception as exc:  # noqa: BLE001 - 计算异常放到队列，由主流程降级
-            result_q.put(exc)
+            result_q.put(("error", exc))
 
-    threading.Thread(target=_background_compute, daemon=True).start()
+    threading.Thread(target=_bg_compute, daemon=True).start()
 
     # 3) 立刻广播预推断的计划意图/路由，让 trace 一上来就是 plan 而不是 chat
     pre_intent = plan_intent or intent_hint or "chat"
@@ -91,18 +91,32 @@ def stream_reply(
         for tok in _stream_narration(config, message):
             yield _sse("delta", {"text": tok})
 
-    # 5) 等到后台计算完成；期间按固定节奏广播 plan_building 心跳，避免看起来卡死
-    result = None
+    # 5) 等图计算，同时按 Agent 节点实时上报推理步骤（实时可视化）；
+    #    期间按固定节奏广播 plan_building 心跳，避免看起来卡死
+    steps: list[str] = []
+    state_result: dict | None = None
+    compute_error: Exception | None = None
     while True:
         try:
-            result = result_q.get(timeout=3.0)
-            break
+            item = result_q.get(timeout=3.0)
         except queue.Empty:
             yield _sse("plan_building", {"message": "正在为你生成分阶段学习计划…"})
             continue
+        kind = item[0]
+        if kind == "node":
+            name = item[1]
+            label = _NODE_LABELS.get(name, name)
+            steps.append(label)
+            yield _sse("step", {"node": name, "label": label})
+        elif kind == "result":
+            steps, state_result = item[1], item[2]
+            break
+        elif kind == "error":
+            compute_error = item[1]
+            break
 
-    if isinstance(result, Exception):
-        logger.warning("流式图计算异常 user=%s", user_id, exc_info=result)
+    if compute_error is not None:
+        logger.warning("流式图计算异常 user=%s", user_id, exc_info=compute_error)
         for seg in _chunks("抱歉，生成学习计划的过程中发生异常，请稍后再试。", True):
             yield _sse("delta", {"text": seg})
         yield _sse(
@@ -111,12 +125,16 @@ def stream_reply(
                 "thread_id": thread_id,
                 "intent": pre_intent,
                 "route": _INTENT_ROUTE.get(pre_intent, "chat"),
+                "steps": steps,
                 "artifacts": {},
             },
         )
         return
 
-    intent, reply, artifacts = result
+    intent = (state_result or {}).get("intent") or pre_intent
+    _messages = (state_result or {}).get("messages") or []
+    reply = _messages[-1]["content"] if _messages else ""
+    artifacts = (state_result or {}).get("artifacts") or {}
     route = _INTENT_ROUTE.get(intent, "chat")
     # 计算完成后的真实意图/路由（可能被 Orchestrator/规则校正）
     yield _sse("intent", {"intent": intent, "route": route})
@@ -131,7 +149,13 @@ def stream_reply(
 
     yield _sse(
         "done",
-        {"thread_id": thread_id, "intent": intent, "route": route, "artifacts": artifacts or {}},
+        {
+            "thread_id": thread_id,
+            "intent": intent,
+            "route": route,
+            "steps": steps,
+            "artifacts": artifacts or {},
+        },
     )
 
 
@@ -240,6 +264,46 @@ def _stream_reply_segments(
     except Exception:  # noqa: BLE001 - 流式确认失败退回预生成分片
         logger.warning("直出计划确认流式失败，回退分片", exc_info=True)
         yield from _chunks(reply, stream)
+
+
+# LangGraph 节点 → 中文推理步骤标签（实时可视化展示）
+_NODE_LABELS = {
+    "orchestrator_agent": "意图识别与路由",
+    "plan_node": "学习目标解析",
+    "tech_requirement_node": "技术目标解析",
+    "job_requirement_node": "岗位目标解析",
+    "interview_node": "技能访谈",
+    "gap_node": "缺口与路径匹配",
+    "learning_plan_node": "学习计划生成",
+    "reply_node": "回复组装",
+}
+
+
+def _compute_stream(config: Config, user_id: str, thread_id: str, message: str, hint: str | None, result_q):
+    """按 LangGraph 节点流式计算：逐节点上报执行状态，最终返回完整结果。"""
+    from app.orchestrator.graph import build_graph
+    from app.persistence.checkpointer import get_checkpointer
+
+    graph = build_graph(config, checkpointer=get_checkpointer(config))
+    steps: list[str] = []
+    for update in graph.stream(
+        {
+            "user_id": user_id,
+            "thread_id": thread_id,
+            "message": message,
+            "intent_hint": hint,
+            "memory_context": {},
+        },
+        config={"configurable": {"thread_id": thread_id}},
+        stream_mode="updates",
+    ):
+        node_name = next(iter(update.keys())) if update else None
+        if not node_name or node_name == "__end__":
+            continue
+        result_q.put(("node", node_name))
+        steps.append(_NODE_LABELS.get(node_name, node_name))
+    final_state = graph.get_state(config={"configurable": {"thread_id": thread_id}})
+    result_q.put(("result", steps, final_state.values))
 
 
 def _compute(config: Config, user_id: str, thread_id: str, message: str, intent_hint: str | None):

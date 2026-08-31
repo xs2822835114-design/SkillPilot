@@ -139,6 +139,78 @@ def test_a9_stream_done_carries_artifacts_field(client):
     assert '"artifacts": {}' in body or '"artifacts":{}' in body
 
 
+# ---------------- 技能识别回归（未知技能 / 目标提取 / 状态隔离，始终运行） ----------------
+
+def _tech_goal(data):
+    """从 chat 响应里取目标画像 goal_name（未知技能也保留用户原始目标）。"""
+    return ((data.get("artifacts") or {}).get("target_profile") or {}).get("goal_name")
+
+
+@pytest.mark.parametrize("msg", [
+    "我想学PHP",
+    "我想学PHP语言",
+    "我要学习PHP",
+    "我想入门PHP",
+    "我准备学PHP",
+    "我想学 PHP 后端",
+    "我想学 PHP 开发",
+    "PHP 怎么学",
+])
+def test_php_variants_recognized(client, msg):
+    """PHP 各种说法都应识别为 tech_learning、目标为 PHP，而非追问「你想学哪个技术」。"""
+    data = _chat(client, "PHPVAR", msg).get_json()["data"]
+    assert data["route"] == "tech_learning"
+    assert data["workflow_status"] == "done"
+    assert _tech_goal(data) == "PHP"
+
+
+def test_unknown_skill_preserved(client):
+    """技能库没有 Rust 时，也要保留用户目标 Rust，而不是追问。"""
+    data = _chat(client, "RUST1", "我想学 Rust").get_json()["data"]
+    assert data["route"] == "tech_learning"
+    assert data["workflow_status"] == "done"
+    assert _tech_goal(data) == "Rust"
+    skills = ((data.get("artifacts") or {}).get("target_profile") or {}).get("skills") or []
+    assert any(s["skill_id"] == "Rust" and s.get("source") == "target" for s in skills)
+
+
+def test_unknown_skill_with_suffix_stripped(client):
+    """「PHP语言 / 后端」等尾缀应剥离，目标仍为 PHP。"""
+    data = _chat(client, "PHP2", "我想学PHP语言").get_json()["data"]
+    assert data["route"] == "tech_learning"
+    assert data["workflow_status"] == "done"
+    assert _tech_goal(data) == "PHP"
+
+
+def test_state_isolation_go_to_php(client):
+    """Go→PHP 切换学习目标：新的 target_profile 只含 PHP，不残留 Go。"""
+    g = _chat(client, "ISO1", "我想学 Go").get_json()["data"]
+    assert g["workflow_status"] == "done"
+    assert _tech_goal(g) == "Go"
+    p = _chat(client, "ISO1", "我想学 PHP").get_json()["data"]
+    assert p["workflow_status"] == "done"
+    assert _tech_goal(p) == "PHP"
+    ids = {s["skill_id"] for s in (((p.get("artifacts") or {}).get("target_profile") or {}).get("skills") or [])}
+    assert "PHP" in ids
+    assert "go" not in ids and "GO" not in ids
+
+
+def test_tech_learning_no_target_still_asks(client):
+    """「我想学」无目标 → 追问；绝不出计划。"""
+    data = _chat(client, "NT1", "我想学").get_json()["data"]
+    assert data["route"] == "tech_learning"
+    assert data["workflow_status"] == "need_input"
+
+
+def test_tech_learning_known_skill_uses_catalog_id(client):
+    """已知技能（LangGraph）走标准 skill_id，无需 unknown 标记。"""
+    data = _chat(client, "KO1", "我想学 LangGraph").get_json()["data"]
+    assert data["workflow_status"] == "done"
+    assert _tech_goal(data) == "LangGraph"
+    skills = ((data.get("artifacts") or {}).get("target_profile") or {}).get("skills") or []
+    assert any(s["skill_id"] == "langgraph" and s.get("source") == "target" for s in skills)
+
+
 # ---------------- DB 版：plan 成功路径（需 DATABASE_URL，自动 skip） ----------------
 
 

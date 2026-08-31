@@ -32,7 +32,9 @@ _INTENT_KEYWORDS: dict[str, tuple[str, ...]] = {
         "学习计划", "学习路线", "学习路径", "规划", "路线", "计划表", "多久能",
     ),
     "tech_learning": (
-        "我想学", "我要学", "想学", "自学", "学一下", "学习", "掌握", "入门", "精通", "提升",
+        "我想学", "我要学", "想学", "自学", "学一下", "学一学", "学习", "掌握", "入门", "精通", "提升",
+        "想系统学习", "想学习", "要学习", "准备学", "准备学习", "打算学", "想掌握", "学会",
+        "怎么学", "如何学", "怎么入门", "怎么系统学", "从零学",
     ),
 }
 
@@ -92,6 +94,16 @@ class AgentOutput(BaseModel):
     confidence: float = Field(ge=0.0, le=1.0, description="置信度 0-1")
     workflow_status: str = Field(default="done")
     artifacts: dict[str, Any] = Field(default_factory=dict)
+    # LLM 负责「理解用户想学什么」：把明确点名的目标技能名填进 target_skills，
+    # 具体规范化（技能库是否存在）交给 Skill Resolver / intent_parser 处理。
+    target_skills: list[str] = Field(
+        default_factory=list,
+        description="用户想学的技能名列表（tech_learning）；只填名称，规范性由下游解析",
+    )
+    target_roles: list[str] = Field(
+        default_factory=list,
+        description="目标岗位名或 role_id（job_search / plan_generation）",
+    )
 
 
 def _shorten(text: str, limit: int = 24) -> str:
@@ -144,7 +156,9 @@ class OrchestratorAgent(BaseAgent):
                     (
                         "system",
                         "你是 SkillMap 的意图识别与回复助手。只能从给定枚举中选择意图，"
-                        "结合历史对话给出简洁、可执行的回复。只输出符合 schema 的 JSON。",
+                        "结合历史对话给出简洁、可执行的回复。只输出符合 schema 的 JSON。\n"
+                        "若意图为 tech_learning，请把用户想学的技能名写入 target_skills 列表"
+                        "（如 [\"PHP\"]）。target_roles 用于 job_search / plan_generation 的目标岗位。",
                     ),
                     (
                         "human",
@@ -333,10 +347,13 @@ class OrchestratorAgent(BaseAgent):
             intent = prev_intent
             promoted_from_answer = True
 
-        # 阶段 9：意图 → 结构化入参（目标岗位/代码块等），供路由节点消费
+        # 阶段 9：意图 → 结构化入参（目标岗位/代码块等），供路由节点消费。
+        # LLM 负责「理解用户想学什么」（output.target_skills），Skill Resolver 负责规范化。
         from app.agents import intent_parser
 
-        params = intent_parser.parse(self.config, message, intent)
+        params = intent_parser.parse(
+            self.config, message, intent, llm_targets=output.get("target_skills")
+        )
         params["_raw_message"] = message  # 供目标指纹在技能未命中时做词面兜底
 
         # chat 意图由本 Agent 直接回复（LLM 自然对话优先，规则兜底）；业务意图交给路由节点

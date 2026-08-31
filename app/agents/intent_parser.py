@@ -151,6 +151,9 @@ def _resolve_target_roles(config: Config, message: str) -> list[str]:
 def _resolve_skill(config: Config, message: str) -> dict | None:
     """从消息中匹配技能词典（JSON/DB 均可用），返回 ``{id, name, domain}``。
 
+    这是「Skill Resolver」：只负责把用户明确提到的目标**规范化**到技能库里的标准 id。
+    它判断的是「系统认不认识这个技能」，而不是「用户到底想学什么」。
+
     最长匹配优先，避免「SQL」误配「SQLite」这类短词；读取失败返回 None。
     """
     norm = _normalize(message)
@@ -181,8 +184,97 @@ def _resolve_skill_id(config: Config, message: str) -> str | None:
     return sk["id"] if sk else None
 
 
-def parse(config: Config, message: str, intent: str) -> dict[str, Any]:
-    """解析意图入参（确定性规则）。"""
+# ---------------- 「理解用户想学什么」（独立于技能库） ----------------
+
+# 学习动词簇（顺序无关，.search 取最左命中）
+_LEARN_VERB = (
+    r"(?:想系统学习|准备学习|准备学|想学习|想入门|要学习|想掌握|想学|要学|"
+    r"打算学|学一下|学一学|自学|入门|掌握|学会|学习)"
+)
+# 句式 A：动词 + 可选量词 + 目标。
+#   拉丁分支净取词：遇到非字母字符即停，天然处理「PHP」「Python」「C++」「Spring Boot」，
+#   也把「PHP语言」「Python后端」切成干净词根；中文分支负责「微积分」这类纯中文目标。
+_AFTER_VERB_RE = re.compile(
+    rf"{_LEARN_VERB}\s*(?:一门|一个|一下|点|亿点)?\s*"
+    r"(?P<skill>[A-Za-z][\w+#.]*(?:\s+[A-Za-z][\w+#.]*)?|[\u4e00-\u9fa5]{2,20})",
+    re.UNICODE,
+)
+# 句式 B：目标在前（如「PHP 怎么学」「Rust 从零学」「卡尔曼滤波如何上手」）。
+#   仅在「无前置学习动词」时才适用——避免「我想学」被误判成技能"我想"。
+_TARGET_FIRST_RE = re.compile(
+    r"^\s*(?P<skill>[A-Za-z][\w+#.]*|[\u4e00-\u9fa5]{2,20})\s*"
+    r"(?:怎么|如何|从零|怎么系统|要)?\s*(?:学|入门|学习|掌握|上手|突破)",
+    re.UNICODE,
+)
+# 只要消息含学习动词，就不再用「目标在前」句式（防止「我想学」空目标被误抓）
+_LEARN_VERB_RE = re.compile(_LEARN_VERB, re.UNICODE)
+# 通用「领域/体裁」尾缀：剥离后得到更干净的目标词根（PHP语言→PHP、前端开发→前端）
+_TRAILING_GENRE = ("语言", "后端", "前端", "开发", "框架", "技术", "编程", "程序设计", "领域", "方向")
+
+
+def _clean_target_name(name: str) -> str:
+    """去掉用法/体裁类尾缀，得到一个可作目标名的干净词根。"""
+    n = (name or "").strip()
+    if not n:
+        return ""
+    for suf in _TRAILING_GENRE:
+        if n.endswith(suf) and len(n) > len(suf):
+            return n[: -len(suf)].strip()
+    return n
+
+
+def _coerce_target_names(raw) -> list[str]:
+    """把 LLM 结构化输出里的 target_skills（str 或 dict）规整成干净名称列表。"""
+    if not raw:
+        return []
+    out: list[str] = []
+    for x in raw:
+        if isinstance(x, dict):
+            x = x.get("skill_name") or x.get("skill_id") or x.get("target")
+        if isinstance(x, str):
+            c = _clean_target_name(x)
+            if c and c not in out:
+                out.append(c)
+    return out
+
+
+def _extract_target_names(message: str) -> list[str]:
+    """从 tech_learning 消息里泛化提取用户想学的东西（技能名），不依赖技能库。
+
+    只做「理解用户想学什么」的语法层提取：去掉学习动词、量词、常见尾缀，得到一个可作
+    目标名的候选。技能是否存在于知识库等规范性判断交给 Skill Resolver（_resolve_skill）。
+    找不到明确目标返回空列表（由调用方追问），但绝不把「库中没有」误判为「用户没说要学什么」。
+    """
+    text = (message or "").strip()
+    if not text:
+        return []
+    m = _AFTER_VERB_RE.search(text)
+    if m:
+        cleaned = _clean_target_name(m.group("skill") or "")
+        return [cleaned] if cleaned else []
+    # 无前置学习动词（如「PHP 怎么学」）才走「目标在前」句式，
+    # 避免「我想学」这类空目标被误抓成技能名。
+    if not _LEARN_VERB_RE.search(text):
+        m = _TARGET_FIRST_RE.search(text)
+        if m:
+            cleaned = _clean_target_name(m.group("skill") or "")
+            if cleaned:
+                return [cleaned]
+    return []
+
+
+def parse(
+    config: Config,
+    message: str,
+    intent: str,
+    llm_targets: list | None = None,
+) -> dict[str, Any]:
+    """解析意图入参（确定性规则）。
+
+    ``llm_targets``：Orchestrator 的 LLM 结构化输出里提取出的目标技能名（如 ["PHP"]）。
+    职责分离：LLM/规则负责「理解用户想学什么」，Skill Resolver（_resolve_skill）负责
+    「把目标规范化到技能库」，两者不再耦合。
+    """
     params = IntentParams(intent=intent)
 
     if intent == "plan_generation":
@@ -200,14 +292,23 @@ def parse(config: Config, message: str, intent: str) -> dict[str, Any]:
             params.need("target_roles")
 
     elif intent == "tech_learning":
-        # 技术学习：从消息解析目标技能（如「我想学 LangGraph」→ langgraph）。
+        # 技术学习：Skill Resolver 先查技能库；
+        # 库中命中 → 用标准 skill_id；库中未命中 → 保留用户原始目标（unknown），
+        # 绝不把「库中没有」误判为「用户没说要学什么」。
         skill = _resolve_skill(config, message)
         if skill:
             params.target_skills = [
                 {"skill_id": skill["id"], "skill_name": skill["name"], "level": 3, "weight": 1.0}
             ]
         else:
-            params.need("target_skills")
+            names = _coerce_target_names(llm_targets) or _extract_target_names(message)
+            if names:
+                params.target_skills = [
+                    {"skill_id": n, "skill_name": n, "level": 3, "weight": 1.0, "unknown": True}
+                    for n in names
+                ]
+            else:
+                params.need("target_skills")
 
     elif intent == "job_search":
         # 岗位求职：从消息解析目标岗位（如「我想找 AI Agent 工程师」→ RC002）。

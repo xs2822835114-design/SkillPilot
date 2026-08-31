@@ -169,6 +169,12 @@ export const useChatStore = defineStore('chat', {
               } else if (evt.type === 'plan_building') {
                 // 计划正在生成（已预判定为计划意图），显示“生成中”状态避免看起来卡死
                 bubbleRef.planBuilding = true
+              } else if (evt.type === 'step') {
+                // 实时可视化：Agent 节点逐步执行，追加到推理步骤列表
+                bubbleRef.steps = bubbleRef.steps || []
+                if (evt.label && !bubbleRef.steps.includes(evt.label)) {
+                  bubbleRef.steps.push(evt.label)
+                }
               } else if (evt.type === 'plan_phase') {
                 // 计划结构化事件增量累积：先出现阶段，后续 plan_task 挂进去
                 bubbleRef.plan = bubbleRef.plan || { phases: [] }
@@ -186,6 +192,10 @@ export const useChatStore = defineStore('chat', {
                 bubbleRef.status = 'ok'
                 bubbleRef.reason = bubbleRef.reason || ''
                 bubbleRef.artifacts = evt.artifacts || {}
+                // 兜底：若 step 事件缺失/未实时推送，用 done 携带的完整 steps 补齐实时可视化
+                if (Array.isArray(evt.steps) && evt.steps.length) {
+                  bubbleRef.steps = evt.steps
+                }
                 // 兜底：若流式事件缺失/未走事件流，从 done.artifacts 补齐计划可视化
                 const lp = bubbleRef.artifacts?.learning_plan
                 if (lp && lp.phases && !bubbleRef.plan) {
